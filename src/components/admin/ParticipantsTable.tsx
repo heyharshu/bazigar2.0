@@ -33,34 +33,40 @@ export const ParticipantsTable = ({
   );
 
   const generateQR = async (participant: any) => {
-    try {
-      const qrDataUrl = await QRCode.toDataURL(participant.id, {
-        width: 300,
-        margin: 2,
-      });
+  try {
+    const qrDataUrl = await QRCode.toDataURL(participant.reg, {
+      width: 300,
+      margin: 2,
+    });
 
-      const { error } = await supabase
-        .from("participants")
-        .update({ qr_code_url: qrDataUrl })
-        .eq("id", participant.id);
+    console.log("QR length:", qrDataUrl.length); // debug
 
-      if (error) throw error;
+    const { error } = await supabase
+      .from("participants")
+      .update({ qr_code_url: qrDataUrl })
+      .eq("reg", participant.reg);
 
-      toast({
-        title: "QR Generated!",
-        description: `QR code created for ${participant.name}`,
-      });
-
-      await onRefresh(); // reload participants
-    } catch (err: any) {
-      console.error(err);
-      toast({
-        title: "Error",
-        description: err.message || "Failed to generate QR.",
-        variant: "destructive",
-      });
+    if (error) {
+      console.error("Update error:", error);
+      throw error;
     }
-  };
+
+    toast({
+      title: "QR Generated!",
+      description: `QR created for ${participant.name}`,
+    });
+
+    await onRefresh();   // IMPORTANT
+
+  } catch (err: any) {
+    console.error(err);
+    toast({
+      title: "Error",
+      description: err.message || "QR save failed",
+      variant: "destructive",
+    });
+  }
+};
 
   const downloadQR = (participant: any) => {
     if (!participant.qr_code_url) return;
@@ -102,7 +108,7 @@ export const ParticipantsTable = ({
 
           <tbody>
             {filtered.map((p) => (
-              <tr key={p.id} className="border-t hover:bg-secondary/50">
+              <tr key={p.reg} className="border-t hover:bg-secondary/50">
                 <td className="p-3 font-medium">{p.name}</td>
                 <td className="p-3 text-muted-foreground">{p.email}</td>
                 <td className="p-3 text-right font-mono text-primary">
