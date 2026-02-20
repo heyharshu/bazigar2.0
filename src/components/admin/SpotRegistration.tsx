@@ -4,28 +4,14 @@ import { toast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { UserPlus, Download, QrCode } from "lucide-react";
 import QRCode from "qrcode";
 
-type Tier = "solo" | "duo" | "group";
-
-const TIER_CONFIG: Record<Tier, { label: string; count: number }> = {
-  solo: { label: "Solo", count: 1 },
-  duo: { label: "Duo", count: 2 },
-  group: { label: "Group of 4", count: 4 },
-};
-
-interface MemberInput {
-  name: string;
-  email: string;
-  phone: string;
-}
-
 interface RegisteredParticipant {
   reg: string;
   name: string;
+  email: string;
   qr_code_url: string;
 }
 
@@ -34,97 +20,92 @@ interface SpotRegistrationProps {
 }
 
 export const SpotRegistration = ({ onRegistered }: SpotRegistrationProps) => {
-  const [tier, setTier] = useState<Tier>("solo");
-  const [members, setMembers] = useState<MemberInput[]>([{ name: "", email: "", phone: "" }]);
+  const [reg, setReg] = useState("");
+  const [name, setName] = useState("");
+  const [email, setEmail] = useState("");
   const [loading, setLoading] = useState(false);
-  const [registered, setRegistered] = useState<RegisteredParticipant[]>([]);
+  const [registered, setRegistered] = useState<RegisteredParticipant | null>(null);
   const [qrDialog, setQrDialog] = useState<RegisteredParticipant | null>(null);
 
-  const handleTierChange = (value: Tier) => {
-    setTier(value);
-    const count = TIER_CONFIG[value].count;
-    setMembers(Array.from({ length: count }, () => ({ name: "", email: "", phone: "" })));
-    setRegistered([]);
-  };
-
-  const updateMember = (index: number, field: keyof MemberInput, value: string) => {
-    setMembers((prev) => prev.map((m, i) => (i === index ? { ...m, [field]: value } : m)));
-  };
-
-  const generateReg = () => {
-    return "SPOT-" + Math.random().toString(36).substring(2, 10).toUpperCase();
-  };
-
   const handleRegister = async () => {
-    const valid = members.every((m) => m.name.trim());
-    if (!valid) {
-      toast({ title: "Name is required for all members", variant: "destructive" });
+    if (!reg.trim() || !name.trim()) {
+      toast({
+        title: "REG and Name required",
+        variant: "destructive",
+      });
       return;
     }
 
     setLoading(true);
-    const results: RegisteredParticipant[] = [];
 
     try {
-      for (const member of members) {
-        const reg = generateReg();
+      // 1️⃣ Insert participant
+      const { data, error } = await supabase
+        .from("participants")
+        .insert({
+          reg: reg.trim(),
+          name: name.trim(),
+          email: email.trim() || null,
+          points: 100,
+        })
+        .select()
+        .single();
 
-        const { data: inserted, error } = await supabase
-          .from("participants")
-          .insert({
-            reg,
-            name: member.name.trim(),
-            email: member.email.trim() || null,
-            phone: member.phone.trim() || null,
-          })
-          .select()
-          .single();
+      if (error || !data) throw error;
 
-        if (error || !inserted) {
-          console.error("Insert error:", error);
-          continue;
-        }
+      // 2️⃣ Generate QR using REG
+      const qrDataUrl = await QRCode.toDataURL(reg.trim(), {
+        width: 300,
+        margin: 2,
+      });
 
-        const qrDataUrl = await QRCode.toDataURL(reg, { width: 300, margin: 2 });
+      // 3️⃣ Save QR
+      const { error: qrError } = await supabase
+        .from("participants")
+        .update({ qr_code_url: qrDataUrl })
+        .eq("reg", reg.trim());
 
-        await supabase
-          .from("participants")
-          .update({ qr_code_url: qrDataUrl })
-          .eq("reg", reg);
+      if (qrError) throw qrError;
 
-        results.push({ reg, name: inserted.name, qr_code_url: qrDataUrl });
-      }
+      const participant = {
+        reg: reg.trim(),
+        name: data.name,
+        email: data.email || "",
+        qr_code_url: qrDataUrl,
+      };
 
-      setRegistered(results);
+      setRegistered(participant);
+
       toast({
-        title: "Registration Complete!",
-        description: `${results.length} participant(s) added.`,
+        title: "Registration Successful",
+        description: `${data.name} added`,
       });
 
       onRegistered();
-    } catch (err) {
+    } catch (err: any) {
       console.error(err);
       toast({
-        title: "Error",
-        description: "Registration failed.",
+        title: "Registration Failed",
+        description: err.message || "Unknown error",
         variant: "destructive",
       });
-    } finally {
-      setLoading(false);
     }
+
+    setLoading(false);
   };
 
   const downloadQR = (p: RegisteredParticipant) => {
     const link = document.createElement("a");
-    link.download = `${p.name}-qr.png`;
     link.href = p.qr_code_url;
+    link.download = `${p.reg}-qr.png`;
     link.click();
   };
 
   const reset = () => {
-    setMembers([{ name: "", email: "", phone: "" }]);
-    setTier("solo");
-    setRegistered([]);
+    setReg("");
+    setName("");
+    setEmail("");
+    setRegistered(null);
   };
 
   return (
@@ -134,72 +115,61 @@ export const SpotRegistration = ({ onRegistered }: SpotRegistrationProps) => {
         ON-SPOT REGISTRATION
       </h3>
 
-      {registered.length > 0 ? (
+      {registered ? (
         <div className="space-y-3">
-          <p className="text-sm text-muted-foreground font-mono">
-            {registered.length} participant(s) registered successfully
+          <p className="text-sm font-mono text-muted-foreground">
+            Participant registered successfully
           </p>
 
-          {registered.map((p) => (
-            <div key={p.reg} className="flex items-center justify-between bg-secondary rounded-lg p-3">
-              <span className="text-sm font-medium">{p.name}</span>
+          <div className="flex items-center justify-between bg-secondary rounded-lg p-3">
+            <span className="text-sm font-medium">{registered.name}</span>
 
-              <div className="flex gap-2">
-                <Button variant="ghost" size="sm" onClick={() => setQrDialog(p)}>
-                  <QrCode className="w-4 h-4" />
-                </Button>
-                <Button variant="ghost" size="sm" onClick={() => downloadQR(p)}>
-                  <Download className="w-4 h-4" />
-                </Button>
-              </div>
+            <div className="flex gap-2">
+              <Button variant="ghost" size="sm" onClick={() => setQrDialog(registered)}>
+                <QrCode className="w-4 h-4" />
+              </Button>
+
+              <Button variant="ghost" size="sm" onClick={() => downloadQR(registered)}>
+                <Download className="w-4 h-4" />
+              </Button>
             </div>
-          ))}
+          </div>
 
           <Button variant="outline" onClick={reset} className="w-full font-mono">
             Register Another
           </Button>
         </div>
       ) : (
-        <div className="space-y-4">
+        <div className="space-y-3">
           <div>
-            <Label className="text-xs text-muted-foreground mb-2 block">Tier</Label>
-            <RadioGroup value={tier} onValueChange={(v) => handleTierChange(v as Tier)} className="flex gap-3">
-              {(Object.keys(TIER_CONFIG) as Tier[]).map((key) => (
-                <div key={key} className="flex items-center gap-2">
-                  <RadioGroupItem value={key} id={`tier-${key}`} />
-                  <Label htmlFor={`tier-${key}`} className="text-sm cursor-pointer">
-                    {TIER_CONFIG[key].label}
-                  </Label>
-                </div>
-              ))}
-            </RadioGroup>
+            <Label className="text-xs text-muted-foreground">REG *</Label>
+            <Input
+              value={reg}
+              onChange={(e) => setReg(e.target.value)}
+              placeholder="Enter REG number"
+              className="bg-secondary border-border mt-1"
+            />
           </div>
 
-          {members.map((member, i) => (
-            <div key={i} className="space-y-2 border-t border-border pt-3 first:border-0 first:pt-0">
-              <Input
-                placeholder="Name *"
-                value={member.name}
-                onChange={(e) => updateMember(i, "name", e.target.value)}
-                className="bg-secondary border-border text-sm"
-              />
+          <div>
+            <Label className="text-xs text-muted-foreground">Name *</Label>
+            <Input
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="Enter name"
+              className="bg-secondary border-border mt-1"
+            />
+          </div>
 
-              <div className="grid grid-cols-2 gap-2">
-                <Input
-                  placeholder="Email"
-                  value={member.email}
-                  onChange={(e) => updateMember(i, "email", e.target.value)}
-                  className="bg-secondary border-border text-sm"
-                />
-                <Input
-                  placeholder="Phone"
-                  value={member.phone}
-                  onChange={(e) => updateMember(i, "phone", e.target.value)}
-                  className="bg-secondary border-border text-sm"
-                />
-              </div>
-            </div>
-          ))}
+          <div>
+            <Label className="text-xs text-muted-foreground">Email</Label>
+            <Input
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder="Enter email"
+              className="bg-secondary border-border mt-1"
+            />
+          </div>
 
           <Button
             onClick={handleRegister}
@@ -207,7 +177,7 @@ export const SpotRegistration = ({ onRegistered }: SpotRegistrationProps) => {
             className="w-full bg-primary text-primary-foreground font-mono"
           >
             <UserPlus className="w-4 h-4 mr-1" />
-            {loading ? "Registering..." : `Register ${TIER_CONFIG[tier].label}`}
+            {loading ? "Registering..." : "Register"}
           </Button>
         </div>
       )}
@@ -221,7 +191,8 @@ export const SpotRegistration = ({ onRegistered }: SpotRegistrationProps) => {
           {qrDialog?.qr_code_url && (
             <div className="flex flex-col items-center gap-4">
               <img src={qrDialog.qr_code_url} className="w-64 h-64 bg-white p-2 rounded" />
-              <Button onClick={() => downloadQR(qrDialog)}>
+
+              <Button onClick={() => downloadQR(qrDialog!)}>
                 <Download className="w-4 h-4 mr-2" />
                 Download QR
               </Button>
