@@ -58,7 +58,7 @@ export const RechargeModal = ({
 
       // 🔹 Insert transaction log
       const { error: txError } = await supabase.from("transactions").insert({
-  participant_reg: selectedReg,   // ← correct column
+  participant_reg: selectedId,   // ← correct column
   points_change: pts,
   type: "recharge",
   scanned_by: "admin",
