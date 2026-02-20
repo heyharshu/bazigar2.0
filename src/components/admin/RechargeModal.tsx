@@ -52,7 +52,7 @@ export const RechargeModal = ({
       const { error: updateError } = await supabase
         .from("participants")
         .update({ points: participant.points + pts })
-        .eq("id", selectedId);
+        .eq("reg", selectedId);
 
       if (updateError) throw updateError;
 
