@@ -7,9 +7,9 @@ import * as XLSX from "xlsx";
 import QRCode from "qrcode";
 
 interface ParsedRow {
+  reg: string;
   name: string;
   email: string;
-  phone: string;
 }
 
 interface ExcelUploadProps {
@@ -31,10 +31,10 @@ export const ExcelUpload = ({ onImported }: ExcelUploadProps) => {
         const json = XLSX.utils.sheet_to_json<any>(sheet);
 
         const rows: ParsedRow[] = json.map((row: any) => ({
+          reg: String(row.Reg || row.reg || ""),
           name: row.Name || row.name || "",
           email: row.Email || row.email || "",
-          phone: String(row.Phone || row.phone || ""),
-        })).filter((r: ParsedRow) => r.name);
+        })).filter((r: ParsedRow) => r.reg && r.name);
 
         setPreview(rows);
         toast({ title: `${rows.length} participants found`, description: "Review and confirm import." });
@@ -63,7 +63,11 @@ export const ExcelUpload = ({ onImported }: ExcelUploadProps) => {
       for (const row of preview) {
         const { data: inserted, error } = await supabase
           .from("participants")
-          .insert({ name: row.name, email: row.email, phone: row.phone })
+          .insert({
+            reg: row.reg,
+            name: row.name,
+            email: row.email,
+          })
           .select()
           .single();
 
@@ -72,9 +76,13 @@ export const ExcelUpload = ({ onImported }: ExcelUploadProps) => {
           continue;
         }
 
-        // Generate QR code URL (data URL with participant ID)
-        const qrDataUrl = await QRCode.toDataURL(inserted.id, { width: 300, margin: 2 });
-        await supabase.from("participants").update({ qr_code_url: qrDataUrl }).eq("id", inserted.id);
+        // Generate QR using REG number
+        const qrDataUrl = await QRCode.toDataURL(inserted.reg, { width: 300, margin: 2 });
+
+        await supabase
+          .from("participants")
+          .update({ qr_code_url: qrDataUrl })
+          .eq("reg", inserted.reg);
       }
 
       toast({ title: "Import Complete!", description: `${preview.length} participants added.` });
@@ -105,7 +113,7 @@ export const ExcelUpload = ({ onImported }: ExcelUploadProps) => {
         >
           <Upload className="w-8 h-8 mx-auto mb-2 text-muted-foreground" />
           <p className="text-sm text-muted-foreground mb-1">Drop .xlsx file here or click to upload</p>
-          <p className="text-xs text-muted-foreground">Columns: Name, Email, Phone</p>
+          <p className="text-xs text-muted-foreground">Columns: Reg, Name, Email</p>
           <input
             type="file"
             accept=".xlsx,.xls"
@@ -120,28 +128,24 @@ export const ExcelUpload = ({ onImported }: ExcelUploadProps) => {
             <table className="w-full text-sm">
               <thead className="bg-secondary sticky top-0">
                 <tr>
+                  <th className="text-left p-2 font-mono text-xs text-muted-foreground">Reg</th>
                   <th className="text-left p-2 font-mono text-xs text-muted-foreground">Name</th>
                   <th className="text-left p-2 font-mono text-xs text-muted-foreground">Email</th>
-                  <th className="text-left p-2 font-mono text-xs text-muted-foreground">Phone</th>
                 </tr>
               </thead>
               <tbody>
                 {preview.map((row, i) => (
                   <tr key={i} className="border-t border-border">
+                    <td className="p-2">{row.reg}</td>
                     <td className="p-2">{row.name}</td>
                     <td className="p-2 text-muted-foreground">{row.email}</td>
-                    <td className="p-2 text-muted-foreground">{row.phone}</td>
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
           <div className="flex gap-2">
-            <Button
-              onClick={confirmImport}
-              disabled={importing}
-              className="bg-primary text-primary-foreground font-mono"
-            >
+            <Button onClick={confirmImport} disabled={importing} className="bg-primary text-primary-foreground font-mono">
               <Check className="w-4 h-4 mr-1" />
               {importing ? "Importing..." : `Confirm Import (${preview.length})`}
             </Button>
