@@ -4,233 +4,142 @@ import { toast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { UserPlus, Download, QrCode } from "lucide-react";
-import QRCode from "qrcode";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Plus, Zap } from "lucide-react";
 
-type Tier = "solo" | "duo" | "group";
-
-const TIER_CONFIG: Record<Tier, { label: string; count: number }> = {
-  solo: { label: "Solo", count: 1 },
-  duo: { label: "Duo", count: 2 },
-  group: { label: "Group of 4", count: 4 },
-};
-
-interface MemberInput {
-  name: string;
-  email: string;
-  phone: string;
+interface RechargeModalProps {
+  participants: any[];
+  onRecharged: () => void;
 }
 
-interface RegisteredParticipant {
-  reg: string;
-  name: string;
-  qr_code_url: string;
-}
-
-interface SpotRegistrationProps {
-  onRegistered: () => void;
-}
-
-export const SpotRegistration = ({ onRegistered }: SpotRegistrationProps) => {
-  const [tier, setTier] = useState<Tier>("solo");
-  const [members, setMembers] = useState<MemberInput[]>([{ name: "", email: "", phone: "" }]);
+export const RechargeModal = ({
+  participants,
+  onRecharged,
+}: RechargeModalProps) => {
+  const [selectedId, setSelectedId] = useState("");
+  const [amount, setAmount] = useState("");
   const [loading, setLoading] = useState(false);
-  const [registered, setRegistered] = useState<RegisteredParticipant[]>([]);
-  const [qrDialog, setQrDialog] = useState<RegisteredParticipant | null>(null);
 
-  const handleTierChange = (value: Tier) => {
-    setTier(value);
-    setMembers(Array.from({ length: TIER_CONFIG[value].count }, () => ({ name: "", email: "", phone: "" })));
-    setRegistered([]);
-  };
+  const handleRecharge = async () => {
+    if (!selectedId || !amount) return;
 
-  const updateMember = (index: number, field: keyof MemberInput, value: string) => {
-    setMembers((prev) => prev.map((m, i) => (i === index ? { ...m, [field]: value } : m)));
-  };
-
-  // 🔒 collision-safe REG generator
-  const generateReg = async () => {
-    while (true) {
-      const reg = "SPOT-" + Math.random().toString(36).substring(2, 10).toUpperCase();
-
-      const { data } = await supabase
-        .from("participants")
-        .select("reg")
-        .eq("reg", reg)
-        .maybeSingle();
-
-      if (!data) return reg; // unique
+    const participant = participants.find((p) => p.id === selectedId);
+    if (!participant) {
+      toast({ title: "Participant not found", variant: "destructive" });
+      return;
     }
-  };
 
-  const handleRegister = async () => {
-    if (!members.every((m) => m.name.trim())) {
-      toast({ title: "Name required for all members", variant: "destructive" });
+    const pts = parseInt(amount);
+    if (isNaN(pts) || pts <= 0) {
+      toast({
+        title: "Invalid amount",
+        description: "Enter a valid positive number",
+        variant: "destructive",
+      });
       return;
     }
 
     setLoading(true);
-    const results: RegisteredParticipant[] = [];
 
     try {
-      for (const member of members) {
-        const reg = await generateReg();
+      // 🔹 Update participant points
+      const { error: updateError } = await supabase
+        .from("participants")
+        .update({ points: participant.points + pts })
+        .eq("id", selectedId);
 
-        const { data: inserted, error } = await supabase
-          .from("participants")
-          .insert({
-            reg,
-            name: member.name.trim(),
-            email: member.email.trim() || null,
-            phone: member.phone.trim() || null,
-          })
-          .select()
-          .single();
+      if (updateError) throw updateError;
 
-        if (error || !inserted) {
-          console.error(error);
-          continue;
-        }
-
-        const qrDataUrl = await QRCode.toDataURL(reg, { width: 300, margin: 2 });
-
-        await supabase
-          .from("participants")
-          .update({ qr_code_url: qrDataUrl })
-          .eq("reg", reg);
-
-        const record = { reg, name: inserted.name, qr_code_url: qrDataUrl };
-        results.push(record);
-
-        // 🔥 auto open QR after each registration (old behavior)
-        setQrDialog(record);
-      }
-
-      setRegistered(results);
-      toast({
-        title: "Registration Complete!",
-        description: `${results.length} participant(s) added`,
+      // 🔹 Insert transaction log
+      const { error: txError } = await supabase.from("transactions").insert({
+        participant_id: selectedId,
+        game_name: "Manual Recharge",
+        points_change: pts,
+        type: "recharge",
+        scanned_by: "admin",
       });
 
-      onRegistered();
-    } catch (err) {
+      if (txError) throw txError;
+
+      toast({
+        title: "Recharge Successful!",
+        description: `${pts} points added to ${participant.name}`,
+      });
+
+      setSelectedId("");
+      setAmount("");
+      onRecharged();
+    } catch (err: any) {
       console.error(err);
-      toast({ title: "Registration failed", variant: "destructive" });
+      toast({
+        title: "Recharge Failed",
+        description: err.message || "Something went wrong",
+        variant: "destructive",
+      });
     }
 
     setLoading(false);
   };
 
-  const downloadQR = (p: RegisteredParticipant) => {
-    const link = document.createElement("a");
-    link.href = p.qr_code_url;
-    link.download = `${p.name}-qr.png`;
-    link.click();
-  };
-
-  const reset = () => {
-    setMembers([{ name: "", email: "", phone: "" }]);
-    setTier("solo");
-    setRegistered([]);
-  };
-
   return (
     <div className="bg-card border border-border rounded-xl p-4">
       <h3 className="text-sm font-mono font-semibold text-muted-foreground mb-3 flex items-center gap-2">
-        <UserPlus className="w-4 h-4 text-primary" />
-        ON-SPOT REGISTRATION
+        <Zap className="w-4 h-4 text-yellow-400" />
+        RECHARGE POINTS
       </h3>
 
-      {registered.length > 0 ? (
-        <div className="space-y-3">
-          <p className="text-sm text-muted-foreground font-mono">
-            {registered.length} participant(s) registered successfully
-          </p>
+      <div className="space-y-3">
+        {/* Participant Select */}
+        <div>
+          <Label className="text-xs text-muted-foreground">
+            Participant
+          </Label>
 
-          {registered.map((p) => (
-            <div key={p.reg} className="flex items-center justify-between bg-secondary rounded-lg p-3">
-              <span className="text-sm font-medium">{p.name}</span>
+          <Select value={selectedId} onValueChange={setSelectedId}>
+            <SelectTrigger className="bg-secondary border-border mt-1">
+              <SelectValue placeholder="Select participant" />
+            </SelectTrigger>
 
-              <div className="flex gap-2">
-                <Button variant="ghost" size="sm" onClick={() => setQrDialog(p)}>
-                  <QrCode className="w-4 h-4" />
-                </Button>
-                <Button variant="ghost" size="sm" onClick={() => downloadQR(p)}>
-                  <Download className="w-4 h-4" />
-                </Button>
-              </div>
-            </div>
-          ))}
-
-          <Button variant="outline" onClick={reset} className="w-full font-mono">
-            Register Another
-          </Button>
-        </div>
-      ) : (
-        <div className="space-y-4">
-          <div>
-            <Label className="text-xs text-muted-foreground mb-2 block">Tier</Label>
-            <RadioGroup value={tier} onValueChange={(v) => handleTierChange(v as Tier)} className="flex gap-3">
-              {(Object.keys(TIER_CONFIG) as Tier[]).map((key) => (
-                <div key={key} className="flex items-center gap-2">
-                  <RadioGroupItem value={key} id={`tier-${key}`} />
-                  <Label htmlFor={`tier-${key}`} className="text-sm cursor-pointer">
-                    {TIER_CONFIG[key].label}
-                  </Label>
-                </div>
+            <SelectContent className="bg-card border-border max-h-60 overflow-auto">
+              {participants.map((p) => (
+                <SelectItem key={p.id} value={p.id}>
+                  {p.name} ({p.points} pts)
+                </SelectItem>
               ))}
-            </RadioGroup>
-          </div>
-
-          {members.map((member, i) => (
-            <div key={i} className="space-y-2 border-t pt-3 first:border-0 first:pt-0">
-              <Input
-                placeholder="Name *"
-                value={member.name}
-                onChange={(e) => updateMember(i, "name", e.target.value)}
-              />
-
-              <div className="grid grid-cols-2 gap-2">
-                <Input
-                  placeholder="Email"
-                  value={member.email}
-                  onChange={(e) => updateMember(i, "email", e.target.value)}
-                />
-                <Input
-                  placeholder="Phone"
-                  value={member.phone}
-                  onChange={(e) => updateMember(i, "phone", e.target.value)}
-                />
-              </div>
-            </div>
-          ))}
-
-          <Button onClick={handleRegister} disabled={loading} className="w-full">
-            <UserPlus className="w-4 h-4 mr-1" />
-            {loading ? "Registering..." : `Register ${TIER_CONFIG[tier].label}`}
-          </Button>
+            </SelectContent>
+          </Select>
         </div>
-      )}
 
-      <Dialog open={!!qrDialog} onOpenChange={() => setQrDialog(null)}>
-        <DialogContent className="max-w-sm">
-          <DialogHeader>
-            <DialogTitle>{qrDialog?.name}</DialogTitle>
-          </DialogHeader>
+        {/* Amount */}
+        <div>
+          <Label className="text-xs text-muted-foreground">
+            Amount
+          </Label>
+          <Input
+            type="number"
+            placeholder="Enter points (e.g. 50)"
+            value={amount}
+            onChange={(e) => setAmount(e.target.value)}
+            className="bg-secondary border-border mt-1 font-mono"
+          />
+        </div>
 
-          {qrDialog?.qr_code_url && (
-            <div className="flex flex-col items-center gap-4">
-              <img src={qrDialog.qr_code_url} className="w-64 h-64 bg-white p-2 rounded" />
-              <Button onClick={() => downloadQR(qrDialog!)}>
-                <Download className="w-4 h-4 mr-2" />
-                Download QR
-              </Button>
-            </div>
-          )}
-        </DialogContent>
-      </Dialog>
+        {/* Button */}
+        <Button
+          onClick={handleRecharge}
+          disabled={loading || !selectedId || !amount}
+          className="w-full bg-primary text-primary-foreground font-mono"
+        >
+          <Plus className="w-4 h-4 mr-1" />
+          {loading ? "Adding..." : "Add Points"}
+        </Button>
+      </div>
     </div>
   );
 };
