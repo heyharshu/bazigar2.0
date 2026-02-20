@@ -1,9 +1,7 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
-import { toast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { StatsCards } from "@/components/admin/StatsCards";
 import { ExcelUpload } from "@/components/admin/ExcelUpload";
 import { ParticipantsTable } from "@/components/admin/ParticipantsTable";
@@ -14,40 +12,53 @@ import { Gamepad2, LogOut, RefreshCw } from "lucide-react";
 
 const Admin = () => {
   const navigate = useNavigate();
+
   const [participants, setParticipants] = useState<any[]>([]);
   const [games, setGames] = useState<any[]>([]);
   const [transactions, setTransactions] = useState<any[]>([]);
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(true);
 
+  // 🔐 Protect admin route
+  useEffect(() => {
+    const user = JSON.parse(localStorage.getItem("baazigar_user") || "null");
+
+    if (!user) {
+      navigate("/login");
+      return;
+    }
+
+    if (user.role !== "admin") {
+      navigate("/scanner");
+      return;
+    }
+
+    fetchData();
+  }, []);
+
   const fetchData = async () => {
     setLoading(true);
+
     const [pRes, gRes, tRes] = await Promise.all([
       supabase.from("participants").select("*").order("name"),
       supabase.from("games").select("*").order("name"),
-      supabase.from("transactions").select("*").order("created_at", { ascending: false }).limit(50),
+      supabase
+        .from("transactions")
+        .select("*")
+        .order("created_at", { ascending: false })
+        .limit(50),
     ]);
+
     if (pRes.data) setParticipants(pRes.data);
     if (gRes.data) setGames(gRes.data);
     if (tRes.data) setTransactions(tRes.data);
+
     setLoading(false);
   };
 
-  useEffect(() => {
-    fetchData();
-
-    const channel = supabase
-      .channel("admin-realtime")
-      .on("postgres_changes", { event: "*", schema: "public", table: "transactions" }, () => {
-        fetchData();
-      })
-      .subscribe();
-
-    return () => { supabase.removeChannel(channel); };
-  }, []);
-
-  const handleLogout = async () => {
-    await supabase.auth.signOut();
+  // 🔓 Custom logout
+  const handleLogout = () => {
+    localStorage.removeItem("baazigar_user");
     navigate("/login");
   };
 
@@ -60,13 +71,19 @@ const Admin = () => {
         <div className="container mx-auto px-4 py-3 flex items-center justify-between">
           <div className="flex items-center gap-3">
             <Gamepad2 className="w-6 h-6 text-primary" />
-            <h1 className="text-xl font-mono font-bold text-primary text-glow-cyan">BAAZIGAR</h1>
-            <span className="text-xs bg-primary/10 text-primary px-2 py-1 rounded-md font-mono">ADMIN</span>
+            <h1 className="text-xl font-mono font-bold text-primary">
+              BAAZIGAR
+            </h1>
+            <span className="text-xs bg-primary/10 text-primary px-2 py-1 rounded-md font-mono">
+              ADMIN
+            </span>
           </div>
+
           <div className="flex items-center gap-2">
             <Button variant="ghost" size="icon" onClick={fetchData}>
               <RefreshCw className="w-4 h-4" />
             </Button>
+
             <Button variant="ghost" size="icon" onClick={handleLogout}>
               <LogOut className="w-4 h-4" />
             </Button>
@@ -84,6 +101,7 @@ const Admin = () => {
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           <div className="lg:col-span-2 space-y-6">
             <ExcelUpload onImported={fetchData} />
+
             <ParticipantsTable
               participants={participants}
               search={search}
@@ -91,10 +109,14 @@ const Admin = () => {
               onRefresh={fetchData}
             />
           </div>
+
           <div className="space-y-6">
             <SpotRegistration onRegistered={fetchData} />
             <GameManagement games={games} onUpdated={fetchData} />
-            <RechargeModal participants={participants} onRecharged={fetchData} />
+            <RechargeModal
+              participants={participants}
+              onRecharged={fetchData}
+            />
           </div>
         </div>
       </main>
