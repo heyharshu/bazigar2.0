@@ -3,7 +3,15 @@ import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
-import { Gamepad2, LogOut, ScanLine, CheckCircle2, XCircle, ArrowLeft } from "lucide-react";
+import {
+  Gamepad2,
+  LogOut,
+  ScanLine,
+  CheckCircle2,
+  XCircle,
+  ArrowLeft,
+  Trophy,
+} from "lucide-react";
 import { Html5Qrcode } from "html5-qrcode";
 
 type ScanState = "scanning" | "scanned" | "success" | "error";
@@ -13,23 +21,38 @@ const Scanner = () => {
   const [scanState, setScanState] = useState<ScanState>("scanning");
   const [participant, setParticipant] = useState<any>(null);
   const [games, setGames] = useState<any[]>([]);
+  const [leaderboard, setLeaderboard] = useState<any[]>([]);
   const [errorMessage, setErrorMessage] = useState("");
   const scannerRef = useRef<Html5Qrcode | null>(null);
   const scannerContainerRef = useRef<string>("qr-reader");
 
+  /* ---------------- Load Games + Leaderboard ---------------- */
+  const loadData = async () => {
+    const { data: g } = await supabase.from("games").select("*").order("name");
+    const { data: l } = await supabase
+      .from("participants")
+      .select("name, points")
+      .order("points", { ascending: false })
+      .limit(5);
+
+    if (g) setGames(g);
+    if (l) setLeaderboard(l);
+  };
+
   useEffect(() => {
-    supabase.from("games").select("*").order("name").then(({ data }) => {
-      if (data) setGames(data);
-    });
+    loadData();
   }, []);
 
+  /* ---------------- Start Scanner ---------------- */
   const startScanner = async () => {
     setScanState("scanning");
     setParticipant(null);
 
     try {
       if (scannerRef.current) {
-        try { await scannerRef.current.stop(); } catch {}
+        try {
+          await scannerRef.current.stop();
+        } catch {}
       }
 
       const html5Qrcode = new Html5Qrcode(scannerContainerRef.current);
@@ -39,13 +62,19 @@ const Scanner = () => {
         { facingMode: "environment" },
         { fps: 10, qrbox: { width: 250, height: 250 } },
         async (decodedText) => {
-          try { await html5Qrcode.stop(); } catch {}
-          handleScan(decodedText);
+          try {
+            await html5Qrcode.stop();
+          } catch {}
+          handleScan(decodedText); // decodedText = REG
         },
         () => {}
       );
-    } catch (err) {
-      toast({ title: "Camera Error", description: "Could not access camera. Please allow camera permissions.", variant: "destructive" });
+    } catch {
+      toast({
+        title: "Camera Error",
+        description: "Allow camera permission",
+        variant: "destructive",
+      });
     }
   };
 
@@ -53,16 +82,19 @@ const Scanner = () => {
     startScanner();
     return () => {
       if (scannerRef.current) {
-        try { scannerRef.current.stop(); } catch {}
+        try {
+          scannerRef.current.stop();
+        } catch {}
       }
     };
   }, []);
 
-  const handleScan = async (participantId: string) => {
+  /* ---------------- Handle Scan (REG based) ---------------- */
+  const handleScan = async (reg: string) => {
     const { data, error } = await supabase
       .from("participants")
       .select("*")
-      .eq("id", participantId)
+      .eq("reg", reg)
       .single();
 
     if (error || !data) {
@@ -75,30 +107,33 @@ const Scanner = () => {
     setScanState("scanned");
   };
 
+  /* ---------------- Deduct Points ---------------- */
   const handleDeduct = async (game: any) => {
     if (!participant) return;
 
     if (participant.points < game.cost) {
-      setErrorMessage(`Insufficient balance! Need ${game.cost} pts, has ${participant.points} pts`);
+      setErrorMessage(
+        `Insufficient points! Need ${game.cost}, has ${participant.points}`
+      );
       setScanState("error");
       return;
     }
 
     const newPoints = participant.points - game.cost;
 
-    const { error: updateError } = await supabase
+    const { error } = await supabase
       .from("participants")
       .update({ points: newPoints })
-      .eq("id", participant.id);
+      .eq("reg", participant.reg);
 
-    if (updateError) {
-      setErrorMessage("Failed to deduct points");
+    if (error) {
+      setErrorMessage("Deduction failed");
       setScanState("error");
       return;
     }
 
     await supabase.from("transactions").insert({
-      participant_id: participant.id,
+      reg: participant.reg,
       game_name: game.name,
       points_change: -game.cost,
       type: "deduction",
@@ -107,120 +142,119 @@ const Scanner = () => {
 
     setParticipant({ ...participant, points: newPoints });
     setScanState("success");
-    toast({ title: "Points Deducted!", description: `${game.cost} pts for ${game.name}` });
+    loadData();
+
+    toast({
+      title: "Points Deducted",
+      description: `${game.cost} pts for ${game.name}`,
+    });
   };
 
+  /* ---------------- Logout ---------------- */
   const handleLogout = async () => {
-    if (scannerRef.current) {
-      try { await scannerRef.current.stop(); } catch {}
-    }
-    await supabase.auth.signOut();
     navigate("/login");
   };
 
+  /* ============================================================ */
   return (
     <div className="min-h-screen bg-background flex flex-col">
-      {/* Header */}
-      <header className="border-b border-border bg-card/50 p-3 flex items-center justify-between">
-        <div className="flex items-center gap-2">
+      {/* HEADER */}
+      <header className="border-b bg-card p-3 flex justify-between">
+        <div className="flex gap-2 items-center">
           <Gamepad2 className="w-5 h-5 text-primary" />
-          <span className="font-mono font-bold text-primary text-sm">BAAZIGAR</span>
-          <span className="text-xs bg-accent/10 text-accent px-2 py-0.5 rounded font-mono">SCAN</span>
+          <span className="font-bold font-mono text-primary">BAAZIGAR</span>
         </div>
-        <Button variant="ghost" size="sm" onClick={handleLogout}>
+        <Button size="sm" variant="ghost" onClick={handleLogout}>
           <LogOut className="w-4 h-4" />
         </Button>
       </header>
 
-      <div className="flex-1 flex flex-col">
-        {scanState === "scanning" && (
-          <div className="flex-1 flex flex-col items-center justify-center p-4">
-            <div className="w-full max-w-sm">
-              <div id={scannerContainerRef.current} className="w-full rounded-xl overflow-hidden border-2 border-primary/30" />
-              <p className="text-center text-muted-foreground mt-4 font-mono text-sm">
-                <ScanLine className="w-4 h-4 inline mr-1" />
-                Point camera at QR code
-              </p>
-            </div>
-          </div>
-        )}
+      {/* ================= SCANNING ================= */}
+      {scanState === "scanning" && (
+        <div className="flex-1 flex flex-col items-center justify-center p-4">
+          <div id={scannerContainerRef.current} className="w-full max-w-sm" />
+          <p className="mt-3 text-sm text-muted-foreground font-mono">
+            <ScanLine className="inline w-4 h-4 mr-1" />
+            Scan QR
+          </p>
 
-        {scanState === "scanned" && participant && (
-          <div className="flex-1 flex flex-col p-4">
-            {/* Participant Info */}
-            <div className="bg-card border border-border rounded-xl p-4 mb-4 glow-cyan">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-lg font-bold font-mono">{participant.name}</p>
-                  <p className="text-sm text-muted-foreground">{participant.email}</p>
-                </div>
-                <div className="text-right">
-                  <p className="text-3xl font-bold font-mono text-primary text-glow-cyan">{participant.points}</p>
-                  <p className="text-xs text-muted-foreground">POINTS</p>
-                </div>
+          {/* Leaderboard */}
+          <div className="mt-8 w-full max-w-sm bg-card border rounded-xl p-4">
+            <p className="font-mono text-sm mb-2 flex items-center gap-2">
+              <Trophy className="w-4 h-4 text-yellow-400" />
+              Leaderboard
+            </p>
+
+            {leaderboard.map((p, i) => (
+              <div key={i} className="flex justify-between text-sm py-1">
+                <span>{i + 1}. {p.name}</span>
+                <span className="text-primary font-mono">{p.points}</span>
               </div>
-            </div>
-
-            {/* Game Grid */}
-            <p className="text-sm font-mono text-muted-foreground mb-2">SELECT GAME</p>
-            <div className="grid grid-cols-2 gap-3 flex-1">
-              {games.map((game) => (
-                <button
-                  key={game.id}
-                  onClick={() => handleDeduct(game)}
-                  disabled={participant.points < game.cost}
-                  className={`rounded-xl p-4 font-mono text-sm font-semibold transition-all flex flex-col items-center justify-center gap-1 border ${
-                    participant.points >= game.cost
-                      ? "bg-secondary border-primary/20 hover:border-primary hover:glow-cyan active:scale-95"
-                      : "bg-muted border-border opacity-50 cursor-not-allowed"
-                  }`}
-                >
-                  <span className="text-foreground">{game.name}</span>
-                  <span className="text-primary text-xs">{game.cost} pts</span>
-                </button>
-              ))}
-            </div>
-
-            <Button
-              variant="ghost"
-              className="mt-4"
-              onClick={startScanner}
-            >
-              <ArrowLeft className="w-4 h-4 mr-2" />
-              Scan Another
-            </Button>
+            ))}
           </div>
-        )}
+        </div>
+      )}
 
-        {scanState === "success" && (
-          <div className="flex-1 flex flex-col items-center justify-center p-4 text-center">
-            <div className="glow-green rounded-full p-6 mb-4">
-              <CheckCircle2 className="w-20 h-20 text-accent" />
-            </div>
-            <h2 className="text-2xl font-bold font-mono text-accent mb-2">POINTS DEDUCTED</h2>
-            <p className="text-muted-foreground mb-1">{participant?.name}</p>
-            <p className="text-lg font-mono text-primary">Balance: {participant?.points} pts</p>
-            <Button onClick={startScanner} className="mt-8 bg-primary text-primary-foreground glow-cyan font-mono">
-              <ScanLine className="w-4 h-4 mr-2" />
-              Scan Next
-            </Button>
+      {/* ================= PARTICIPANT ================= */}
+      {scanState === "scanned" && participant && (
+        <div className="p-4 flex-1">
+          <div className="bg-card border rounded-xl p-4 mb-4">
+            <p className="text-lg font-bold">{participant.name}</p>
+            <p className="text-sm text-muted-foreground">{participant.email}</p>
+            <p className="text-3xl text-primary font-mono">
+              {participant.points} pts
+            </p>
           </div>
-        )}
 
-        {scanState === "error" && (
-          <div className="flex-1 flex flex-col items-center justify-center p-4 text-center">
-            <div className="glow-red rounded-full p-6 mb-4">
-              <XCircle className="w-20 h-20 text-destructive" />
-            </div>
-            <h2 className="text-2xl font-bold font-mono text-destructive mb-2">ERROR</h2>
-            <p className="text-muted-foreground mb-6">{errorMessage}</p>
-            <Button onClick={startScanner} className="bg-primary text-primary-foreground glow-cyan font-mono">
-              <ScanLine className="w-4 h-4 mr-2" />
-              Try Again
-            </Button>
+          <div className="grid grid-cols-2 gap-3">
+            {games.map((game) => (
+              <button
+                key={game.id}
+                onClick={() => handleDeduct(game)}
+                disabled={participant.points < game.cost}
+                className={`p-4 rounded-xl border ${
+                  participant.points >= game.cost
+                    ? "bg-secondary hover:border-primary"
+                    : "opacity-50 cursor-not-allowed"
+                }`}
+              >
+                <p>{game.name}</p>
+                <p className="text-xs text-primary">{game.cost} pts</p>
+              </button>
+            ))}
           </div>
-        )}
-      </div>
+
+          <Button className="mt-4 w-full" onClick={startScanner}>
+            <ArrowLeft className="w-4 h-4 mr-2" />
+            Scan Another
+          </Button>
+        </div>
+      )}
+
+      {/* ================= SUCCESS ================= */}
+      {scanState === "success" && (
+        <div className="flex-1 flex flex-col items-center justify-center">
+          <CheckCircle2 className="w-20 h-20 text-green-500 mb-4" />
+          <p className="text-xl font-bold">Points Deducted</p>
+          <p>{participant?.name}</p>
+          <p className="text-primary">{participant?.points} pts</p>
+          <Button className="mt-6" onClick={startScanner}>
+            Scan Next
+          </Button>
+        </div>
+      )}
+
+      {/* ================= ERROR ================= */}
+      {scanState === "error" && (
+        <div className="flex-1 flex flex-col items-center justify-center">
+          <XCircle className="w-20 h-20 text-red-500 mb-4" />
+          <p className="text-xl font-bold">Error</p>
+          <p>{errorMessage}</p>
+          <Button className="mt-6" onClick={startScanner}>
+            Try Again
+          </Button>
+        </div>
+      )}
     </div>
   );
 };
