@@ -11,7 +11,7 @@ interface ParticipantsTableProps {
   participants: any[];
   search: string;
   onSearchChange: (val: string) => void;
-  onRefresh: () => void;
+  onRefresh: () => Promise<void>;
 }
 
 export const ParticipantsTable = ({
@@ -22,24 +22,22 @@ export const ParticipantsTable = ({
 }: ParticipantsTableProps) => {
   const [selectedQR, setSelectedQR] = useState<any>(null);
 
-  // ✅ Safe search (prevents crash)
   const filtered = participants.filter((p) =>
     p.name?.toLowerCase().includes(search.toLowerCase()) ||
-    p.email?.toLowerCase().includes(search.toLowerCase()) ||
-    p.reg?.toLowerCase().includes(search.toLowerCase())
+    p.email?.toLowerCase().includes(search.toLowerCase())
   );
 
   const downloadQR = (participant: any) => {
     if (!participant.qr_code_url) return;
     const link = document.createElement("a");
-    link.download = `${participant.reg}-qr.png`;
+    link.download = `${participant.name}-qr.png`;
     link.href = participant.qr_code_url;
     link.click();
   };
 
   const generateQR = async (participant: any) => {
     try {
-      const qrDataUrl = await QRCode.toDataURL(participant.reg, {
+      const qrDataUrl = await QRCode.toDataURL(participant.id, {
         width: 300,
         margin: 2,
       });
@@ -47,30 +45,23 @@ export const ParticipantsTable = ({
       const { error } = await supabase
         .from("participants")
         .update({ qr_code_url: qrDataUrl })
-        .eq("reg", participant.reg);
+        .eq("id", participant.id);
 
-      if (error) {
-        console.error(error);
-        toast({
-          title: "QR Update Failed",
-          description: error.message,
-          variant: "destructive",
-        });
-        return;
-      }
+      if (error) throw error;
 
       toast({
         title: "QR Generated!",
-        description: `QR created for ${participant.name}`,
+        description: `QR code created for ${participant.name}`,
       });
 
-      // ✅ Ensure admin panel reloads updated QR
+      // 🔥 THIS IS THE KEY
       await onRefresh();
-    } catch (err) {
+
+    } catch (err: any) {
       console.error(err);
       toast({
         title: "Error",
-        description: "Failed to generate QR.",
+        description: err.message || "Failed to generate QR.",
         variant: "destructive",
       });
     }
@@ -86,7 +77,7 @@ export const ParticipantsTable = ({
         <div className="relative w-64">
           <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
           <Input
-            placeholder="Search name, email, reg..."
+            placeholder="Search name or email..."
             value={search}
             onChange={(e) => onSearchChange(e.target.value)}
             className="pl-9 bg-secondary border-border text-sm"
@@ -98,7 +89,6 @@ export const ParticipantsTable = ({
         <table className="w-full text-sm">
           <thead className="bg-secondary sticky top-0">
             <tr>
-              <th className="text-left p-3 text-xs">Reg</th>
               <th className="text-left p-3 text-xs">Name</th>
               <th className="text-left p-3 text-xs">Email</th>
               <th className="text-right p-3 text-xs">Points</th>
@@ -108,8 +98,7 @@ export const ParticipantsTable = ({
 
           <tbody>
             {filtered.map((p) => (
-              <tr key={p.reg} className="border-t hover:bg-secondary/50">
-                <td className="p-3 font-mono">{p.reg}</td>
+              <tr key={p.id} className="border-t hover:bg-secondary/50">
                 <td className="p-3 font-medium">{p.name}</td>
                 <td className="p-3 text-muted-foreground">{p.email}</td>
                 <td className="p-3 text-right font-mono text-primary">
@@ -117,7 +106,7 @@ export const ParticipantsTable = ({
                 </td>
 
                 <td className="p-3 text-right">
-                  {p.qr_code_url && p.qr_code_url.length > 0 ? (
+                  {p.qr_code_url ? (
                     <Button
                       variant="ghost"
                       size="sm"
@@ -141,7 +130,7 @@ export const ParticipantsTable = ({
 
             {filtered.length === 0 && (
               <tr>
-                <td colSpan={5} className="p-8 text-center text-muted-foreground">
+                <td colSpan={4} className="p-8 text-center text-muted-foreground">
                   No participants found
                 </td>
               </tr>

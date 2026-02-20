@@ -114,12 +114,7 @@ const Login = () => {
             </Button>
           </form>
 
-          <button
-            onClick={() => setIsSignUp(!isSignUp)}
-            className="w-full text-center text-sm text-muted-foreground mt-4 hover:text-primary transition-colors"
-          >
-            {isSignUp ? "Already have an account? Log in" : "Need an account? Sign up"}
-          </button>
+         
         </div>
       </div>
     </div>
