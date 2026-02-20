@@ -29,7 +29,7 @@ export const RechargeModal = ({
   const handleRecharge = async () => {
     if (!selectedId || !amount) return;
 
-    const participant = participants.find((p) => p.id === selectedId);
+    const participant = participants.find((p) => p.reg === selectedId);
     if (!participant) {
       toast({ title: "Participant not found", variant: "destructive" });
       return;
@@ -108,7 +108,7 @@ export const RechargeModal = ({
 
             <SelectContent className="bg-card border-border max-h-60 overflow-auto">
               {participants.map((p) => (
-                <SelectItem key={p.id} value={p.id}>
+                <SelectItem key={p.reg} value={p.reg}>
                   {p.name} ({p.points} pts)
                 </SelectItem>
               ))}
