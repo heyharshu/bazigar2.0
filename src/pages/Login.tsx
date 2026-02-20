@@ -16,6 +16,8 @@ const Login = () => {
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (loading) return;
+
     setLoading(true);
 
     try {
@@ -23,7 +25,7 @@ const Login = () => {
       const { data, error } = await supabase
         .from("admin_users")
         .select("*")
-        .eq("username", username)
+        .eq("username", username.trim())
         .limit(1);
 
       if (error) throw error;
@@ -34,22 +36,29 @@ const Login = () => {
 
       const user = data[0];
 
-      // 🔐 Check password manually
+      // 🔐 Manual password check
       if (user.password !== password) {
         throw new Error("Invalid username or password");
       }
 
       // 💾 Save session locally
       localStorage.setItem("baazigar_user", JSON.stringify(user));
+      console.log("LOGIN SUCCESS →", user);
+
+      // 📱 Small delay helps mobile routing
+      await new Promise((r) => setTimeout(r, 80));
 
       toast({
         title: "Login successful",
         description: `Welcome ${user.role}`,
       });
 
-      // 🚀 Redirect based on role
-      if (user.role === "admin") navigate("/admin");
-      else navigate("/scanner");
+      // 🚀 Redirect safely
+      if (user.role === "admin") {
+        navigate("/admin", { replace: true });
+      } else {
+        navigate("/scanner", { replace: true });
+      }
 
     } catch (err: any) {
       toast({
@@ -63,18 +72,22 @@ const Login = () => {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center p-4">
+    <div className="min-h-screen flex items-center justify-center p-4 bg-background">
       <div className="w-full max-w-md">
 
+        {/* Logo */}
         <div className="text-center mb-8">
           <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-primary/10 mb-4">
             <Gamepad2 className="w-8 h-8 text-primary" />
           </div>
-          <h1 className="text-3xl font-bold font-mono text-primary">BAAZIGAR</h1>
+          <h1 className="text-3xl font-bold font-mono text-primary">
+            BAAZIGAR
+          </h1>
           <p className="text-muted-foreground">QR Points System</p>
         </div>
 
-        <div className="bg-card border rounded-xl p-6">
+        {/* Login Card */}
+        <div className="bg-card border border-border rounded-xl p-6 shadow-sm">
           <form onSubmit={handleLogin} className="space-y-4">
 
             {/* Username */}
@@ -96,15 +109,16 @@ const Login = () => {
                 type="password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                placeholder="••••••"
+                placeholder="••••••••"
                 required
               />
             </div>
 
+            {/* Submit */}
             <Button
               type="submit"
               disabled={loading}
-              className="w-full"
+              className="w-full bg-primary text-primary-foreground"
             >
               {loading ? "Logging in..." : "Login"}
             </Button>
