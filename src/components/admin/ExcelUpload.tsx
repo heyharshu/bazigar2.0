@@ -8,8 +8,8 @@ import QRCode from "qrcode";
 
 interface ParsedRow {
   reg: string;
-  name: string;
-  email: string;
+  Name: string;
+  Email: string;
 }
 
 interface ExcelUploadProps {
@@ -32,9 +32,9 @@ export const ExcelUpload = ({ onImported }: ExcelUploadProps) => {
 
         const rows: ParsedRow[] = json.map((row: any) => ({
           reg: String(row.Reg || row.reg || ""),
-          name: row.Name || row.name || "",
-          email: row.Email || row.email || "",
-        })).filter((r: ParsedRow) => r.reg && r.name);
+          Name: row.Name || row.Name || "",
+          Email: row.Email || row.Email || "",
+        })).filter((r: ParsedRow) => r.reg && r.Name);
 
         setPreview(rows);
         toast({ title: `${rows.length} participants found`, description: "Review and confirm import." });
@@ -65,8 +65,8 @@ export const ExcelUpload = ({ onImported }: ExcelUploadProps) => {
           .from("participants")
           .insert({
             reg: row.reg,
-            name: row.name,
-            email: row.email,
+            Name: row.Name,
+            Email: row.Email,
           })
           .select()
           .single();
@@ -137,8 +137,8 @@ export const ExcelUpload = ({ onImported }: ExcelUploadProps) => {
                 {preview.map((row, i) => (
                   <tr key={i} className="border-t border-border">
                     <td className="p-2">{row.reg}</td>
-                    <td className="p-2">{row.name}</td>
-                    <td className="p-2 text-muted-foreground">{row.email}</td>
+                    <td className="p-2">{row.Name}</td>
+                    <td className="p-2 text-muted-foreground">{row.Email}</td>
                   </tr>
                 ))}
               </tbody>
