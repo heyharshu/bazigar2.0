@@ -34,35 +34,47 @@ export const ParticipantsTable = ({
 
   const generateQR = async (participant: any) => {
   try {
-    const qrDataUrl = await QRCode.toDataURL(participant.reg, {
+    if (!participant?.reg) {
+      throw new Error("Participant REG missing");
+    }
+
+    const qrDataUrl = await QRCode.toDataURL(participant.reg.trim(), {
       width: 300,
       margin: 2,
     });
 
-    console.log("QR length:", qrDataUrl.length); // debug
+    console.log("Generating QR for REG:", participant.reg);
+    console.log("QR length:", qrDataUrl.length);
 
-    const { error } = await supabase
+    const { data, error } = await supabase
       .from("participants")
       .update({ qr_code_url: qrDataUrl })
-      .eq("reg", participant.reg);
+      .eq("reg", participant.reg.trim())
+      .select();   // 🔥 ensures row matched
 
     if (error) {
       console.error("Update error:", error);
       throw error;
     }
 
+    if (!data || data.length === 0) {
+      throw new Error("No row updated (REG mismatch or RLS block)");
+    }
+
+    console.log("QR saved successfully:", data);
+
     toast({
       title: "QR Generated!",
-      description: `QR created for ${participant.name}`,
+      description: `QR saved for ${participant.name}`,
     });
 
-    await onRefresh();   // IMPORTANT
+    await onRefresh();
 
   } catch (err: any) {
-    console.error(err);
+    console.error("QR ERROR:", err);
     toast({
-      title: "Error",
-      description: err.message || "QR save failed",
+      title: "QR Save Failed",
+      description: err.message,
       variant: "destructive",
     });
   }
