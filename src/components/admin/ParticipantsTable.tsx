@@ -4,7 +4,12 @@ import { toast } from "@/hooks/use-toast";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Search, QrCode, Download, RefreshCw } from "lucide-react";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import QRCode from "qrcode";
 
 interface ParticipantsTableProps {
@@ -27,14 +32,6 @@ export const ParticipantsTable = ({
     p.email?.toLowerCase().includes(search.toLowerCase())
   );
 
-  const downloadQR = (participant: any) => {
-    if (!participant.qr_code_url) return;
-    const link = document.createElement("a");
-    link.download = `${participant.name}-qr.png`;
-    link.href = participant.qr_code_url;
-    link.click();
-  };
-
   const generateQR = async (participant: any) => {
     try {
       const qrDataUrl = await QRCode.toDataURL(participant.id, {
@@ -54,9 +51,7 @@ export const ParticipantsTable = ({
         description: `QR code created for ${participant.name}`,
       });
 
-      // 🔥 THIS IS THE KEY
-      await onRefresh();
-
+      await onRefresh(); // reload participants
     } catch (err: any) {
       console.error(err);
       toast({
@@ -65,6 +60,15 @@ export const ParticipantsTable = ({
         variant: "destructive",
       });
     }
+  };
+
+  const downloadQR = (participant: any) => {
+    if (!participant.qr_code_url) return;
+
+    const link = document.createElement("a");
+    link.href = participant.qr_code_url;
+    link.download = `${participant.name}-qr.png`;
+    link.click();
   };
 
   return (
@@ -106,7 +110,8 @@ export const ParticipantsTable = ({
                 </td>
 
                 <td className="p-3 text-right">
-                  {p.qr_code_url ? (
+                  {p.qr_code_url &&
+                  p.qr_code_url.startsWith("data:image") ? (
                     <Button
                       variant="ghost"
                       size="sm"
