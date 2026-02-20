@@ -5,12 +5,12 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { toast } from "@/hooks/use-toast";
-import { Gamepad2, Shield, ScanLine } from "lucide-react";
+import { Gamepad2 } from "lucide-react";
 
 const Login = () => {
   const navigate = useNavigate();
 
-  const [email, setEmail] = useState("");
+  const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
 
@@ -19,32 +19,42 @@ const Login = () => {
     setLoading(true);
 
     try {
+      // 🔎 Fetch user by username
       const { data, error } = await supabase
         .from("admin_users")
         .select("*")
-        .eq("email", email)
-        .eq("password", password)
-        .single();
+        .eq("username", username)
+        .limit(1);
 
-      if (error || !data) {
-        throw new Error("Invalid email or password");
+      if (error) throw error;
+
+      if (!data || data.length === 0) {
+        throw new Error("Invalid username or password");
       }
 
-      // Save session locally
-      localStorage.setItem("baazigar_user", JSON.stringify(data));
+      const user = data[0];
+
+      // 🔐 Check password manually
+      if (user.password !== password) {
+        throw new Error("Invalid username or password");
+      }
+
+      // 💾 Save session locally
+      localStorage.setItem("baazigar_user", JSON.stringify(user));
 
       toast({
         title: "Login successful",
-        description: `Welcome ${data.role}`,
+        description: `Welcome ${user.role}`,
       });
 
-      if (data.role === "admin") navigate("/admin");
+      // 🚀 Redirect based on role
+      if (user.role === "admin") navigate("/admin");
       else navigate("/scanner");
 
     } catch (err: any) {
       toast({
         title: "Login Failed",
-        description: err.message,
+        description: err.message || "Invalid login",
         variant: "destructive",
       });
     }
@@ -53,34 +63,40 @@ const Login = () => {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center retro-grid p-4">
+    <div className="min-h-screen flex items-center justify-center p-4">
       <div className="w-full max-w-md">
+
         <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-primary/10 glow-cyan mb-4">
+          <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-primary/10 mb-4">
             <Gamepad2 className="w-8 h-8 text-primary" />
           </div>
           <h1 className="text-3xl font-bold font-mono text-primary">BAAZIGAR</h1>
           <p className="text-muted-foreground">QR Points System</p>
         </div>
 
-        <div className="bg-card border border-border rounded-xl p-6">
+        <div className="bg-card border rounded-xl p-6">
           <form onSubmit={handleLogin} className="space-y-4">
+
+            {/* Username */}
             <div>
-              <Label>Email</Label>
+              <Label>Username</Label>
               <Input
-                type="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
+                type="text"
+                value={username}
+                onChange={(e) => setUsername(e.target.value)}
+                placeholder="admin"
                 required
               />
             </div>
 
+            {/* Password */}
             <div>
               <Label>Password</Label>
               <Input
                 type="password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
+                placeholder="••••••"
                 required
               />
             </div>
@@ -88,10 +104,11 @@ const Login = () => {
             <Button
               type="submit"
               disabled={loading}
-              className="w-full bg-primary text-primary-foreground"
+              className="w-full"
             >
               {loading ? "Logging in..." : "Login"}
             </Button>
+
           </form>
         </div>
       </div>
