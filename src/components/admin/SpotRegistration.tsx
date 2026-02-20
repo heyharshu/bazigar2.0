@@ -11,10 +11,10 @@ import QRCode from "qrcode";
 
 type Tier = "solo" | "duo" | "group";
 
-const TIER_CONFIG: Record<Tier, { label: string; count: number; points: number }> = {
-  solo: { label: "Solo", count: 1, points: 100 },
-  duo: { label: "Duo", count: 2, points: 100 },
-  group: { label: "Group of 4", count: 4, points: 100 },
+const TIER_CONFIG: Record<Tier, { label: string; count: number }> = {
+  solo: { label: "Solo", count: 1 },
+  duo: { label: "Duo", count: 2 },
+  group: { label: "Group of 4", count: 4 },
 };
 
 interface MemberInput {
@@ -24,7 +24,7 @@ interface MemberInput {
 }
 
 interface RegisteredParticipant {
-  id: string;
+  reg: string;
   name: string;
   qr_code_url: string;
 }
@@ -51,6 +51,10 @@ export const SpotRegistration = ({ onRegistered }: SpotRegistrationProps) => {
     setMembers((prev) => prev.map((m, i) => (i === index ? { ...m, [field]: value } : m)));
   };
 
+  const generateReg = () => {
+    return "SPOT-" + Math.random().toString(36).substring(2, 10).toUpperCase();
+  };
+
   const handleRegister = async () => {
     const valid = members.every((m) => m.name.trim());
     if (!valid) {
@@ -63,9 +67,12 @@ export const SpotRegistration = ({ onRegistered }: SpotRegistrationProps) => {
 
     try {
       for (const member of members) {
+        const reg = generateReg();
+
         const { data: inserted, error } = await supabase
           .from("participants")
           .insert({
+            reg,
             name: member.name.trim(),
             email: member.email.trim() || null,
             phone: member.phone.trim() || null,
@@ -78,17 +85,30 @@ export const SpotRegistration = ({ onRegistered }: SpotRegistrationProps) => {
           continue;
         }
 
-        const qrDataUrl = await QRCode.toDataURL(inserted.id, { width: 300, margin: 2 });
-        await supabase.from("participants").update({ qr_code_url: qrDataUrl }).eq("id", inserted.id);
+        const qrDataUrl = await QRCode.toDataURL(reg, { width: 300, margin: 2 });
 
-        results.push({ id: inserted.id, name: inserted.name, qr_code_url: qrDataUrl });
+        await supabase
+          .from("participants")
+          .update({ qr_code_url: qrDataUrl })
+          .eq("reg", reg);
+
+        results.push({ reg, name: inserted.name, qr_code_url: qrDataUrl });
       }
 
       setRegistered(results);
-      toast({ title: "Registration Complete!", description: `${results.length} participant(s) added.` });
+      toast({
+        title: "Registration Complete!",
+        description: `${results.length} participant(s) added.`,
+      });
+
       onRegistered();
-    } catch {
-      toast({ title: "Error", description: "Registration failed.", variant: "destructive" });
+    } catch (err) {
+      console.error(err);
+      toast({
+        title: "Error",
+        description: "Registration failed.",
+        variant: "destructive",
+      });
     } finally {
       setLoading(false);
     }
@@ -119,28 +139,28 @@ export const SpotRegistration = ({ onRegistered }: SpotRegistrationProps) => {
           <p className="text-sm text-muted-foreground font-mono">
             {registered.length} participant(s) registered successfully
           </p>
-          <div className="space-y-2">
-            {registered.map((p) => (
-              <div key={p.id} className="flex items-center justify-between bg-secondary rounded-lg p-3">
-                <span className="text-sm font-medium">{p.name}</span>
-                <div className="flex gap-2">
-                  <Button variant="ghost" size="sm" onClick={() => setQrDialog(p)}>
-                    <QrCode className="w-4 h-4" />
-                  </Button>
-                  <Button variant="ghost" size="sm" onClick={() => downloadQR(p)}>
-                    <Download className="w-4 h-4" />
-                  </Button>
-                </div>
+
+          {registered.map((p) => (
+            <div key={p.reg} className="flex items-center justify-between bg-secondary rounded-lg p-3">
+              <span className="text-sm font-medium">{p.name}</span>
+
+              <div className="flex gap-2">
+                <Button variant="ghost" size="sm" onClick={() => setQrDialog(p)}>
+                  <QrCode className="w-4 h-4" />
+                </Button>
+                <Button variant="ghost" size="sm" onClick={() => downloadQR(p)}>
+                  <Download className="w-4 h-4" />
+                </Button>
               </div>
-            ))}
-          </div>
+            </div>
+          ))}
+
           <Button variant="outline" onClick={reset} className="w-full font-mono">
             Register Another
           </Button>
         </div>
       ) : (
         <div className="space-y-4">
-          {/* Tier Selection */}
           <div>
             <Label className="text-xs text-muted-foreground mb-2 block">Tier</Label>
             <RadioGroup value={tier} onValueChange={(v) => handleTierChange(v as Tier)} className="flex gap-3">
@@ -155,18 +175,15 @@ export const SpotRegistration = ({ onRegistered }: SpotRegistrationProps) => {
             </RadioGroup>
           </div>
 
-          {/* Member Inputs */}
           {members.map((member, i) => (
             <div key={i} className="space-y-2 border-t border-border pt-3 first:border-0 first:pt-0">
-              {members.length > 1 && (
-                <p className="text-xs text-muted-foreground font-mono">Member {i + 1}</p>
-              )}
               <Input
                 placeholder="Name *"
                 value={member.name}
                 onChange={(e) => updateMember(i, "name", e.target.value)}
                 className="bg-secondary border-border text-sm"
               />
+
               <div className="grid grid-cols-2 gap-2">
                 <Input
                   placeholder="Email"
@@ -195,16 +212,16 @@ export const SpotRegistration = ({ onRegistered }: SpotRegistrationProps) => {
         </div>
       )}
 
-      {/* QR Preview Dialog */}
       <Dialog open={!!qrDialog} onOpenChange={() => setQrDialog(null)}>
         <DialogContent className="bg-card border-border max-w-sm">
           <DialogHeader>
             <DialogTitle className="font-mono">{qrDialog?.name}</DialogTitle>
           </DialogHeader>
+
           {qrDialog?.qr_code_url && (
             <div className="flex flex-col items-center gap-4">
-              <img src={qrDialog.qr_code_url} alt="QR Code" className="w-64 h-64 rounded-lg bg-foreground p-2" />
-              <Button onClick={() => downloadQR(qrDialog)} className="font-mono">
+              <img src={qrDialog.qr_code_url} className="w-64 h-64 bg-white p-2 rounded" />
+              <Button onClick={() => downloadQR(qrDialog)}>
                 <Download className="w-4 h-4 mr-2" />
                 Download QR
               </Button>

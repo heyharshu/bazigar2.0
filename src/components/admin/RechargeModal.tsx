@@ -4,7 +4,13 @@ import { toast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Plus, Zap } from "lucide-react";
 
 interface RechargeModalProps {
@@ -13,16 +19,20 @@ interface RechargeModalProps {
 }
 
 export const RechargeModal = ({ participants, onRecharged }: RechargeModalProps) => {
-  const [selectedId, setSelectedId] = useState("");
+  const [selectedReg, setSelectedReg] = useState("");
   const [amount, setAmount] = useState("");
   const [loading, setLoading] = useState(false);
 
   const handleRecharge = async () => {
-    if (!selectedId || !amount) return;
+    if (!selectedReg || !amount) return;
     setLoading(true);
 
-    const participant = participants.find((p) => p.id === selectedId);
-    if (!participant) return;
+    const participant = participants.find((p) => p.reg === selectedReg);
+    if (!participant) {
+      toast({ title: "Participant not found", variant: "destructive" });
+      setLoading(false);
+      return;
+    }
 
     const pts = parseInt(amount);
     if (isNaN(pts) || pts <= 0) {
@@ -31,26 +41,45 @@ export const RechargeModal = ({ participants, onRecharged }: RechargeModalProps)
       return;
     }
 
-    const { error } = await supabase
-      .from("participants")
-      .update({ points: participant.points + pts })
-      .eq("id", selectedId);
+    try {
+      // 🔥 Update points
+      const { error: updateError } = await supabase
+        .from("participants")
+        .update({ points: participant.points + pts })
+        .eq("reg", selectedReg);
 
-    if (error) {
-      toast({ title: "Error", description: "Recharge failed.", variant: "destructive" });
-    } else {
-      await supabase.from("transactions").insert({
-        participant_id: selectedId,
+      if (updateError) throw updateError;
+
+      // 🔥 Insert transaction
+      const { error: txnError } = await supabase.from("transactions").insert({
+        participant_reg: selectedReg,
+        game_id: null, // optional since manual recharge
         game_name: "Manual Recharge",
         points_change: pts,
         type: "recharge",
         scanned_by: "admin",
       });
-      toast({ title: "Recharged!", description: `${pts} pts added to ${participant.name}` });
-      setSelectedId("");
+
+      if (txnError) throw txnError;
+
+      toast({
+        title: "Recharged!",
+        description: `${pts} pts added to ${participant.name}`,
+      });
+
+      setSelectedReg("");
       setAmount("");
-      onRecharged();
+      await onRecharged();
+
+    } catch (err: any) {
+      console.error(err);
+      toast({
+        title: "Recharge failed",
+        description: err.message,
+        variant: "destructive",
+      });
     }
+
     setLoading(false);
   };
 
@@ -64,19 +93,21 @@ export const RechargeModal = ({ participants, onRecharged }: RechargeModalProps)
       <div className="space-y-3">
         <div>
           <Label className="text-xs text-muted-foreground">Participant</Label>
-          <Select value={selectedId} onValueChange={setSelectedId}>
+          <Select value={selectedReg} onValueChange={setSelectedReg}>
             <SelectTrigger className="bg-secondary border-border mt-1">
               <SelectValue placeholder="Select participant" />
             </SelectTrigger>
+
             <SelectContent className="bg-card border-border">
               {participants.map((p) => (
-                <SelectItem key={p.id} value={p.id}>
+                <SelectItem key={p.reg} value={p.reg}>
                   {p.name} ({p.points} pts)
                 </SelectItem>
               ))}
             </SelectContent>
           </Select>
         </div>
+
         <div>
           <Label className="text-xs text-muted-foreground">Amount</Label>
           <Input
@@ -87,9 +118,10 @@ export const RechargeModal = ({ participants, onRecharged }: RechargeModalProps)
             className="bg-secondary border-border mt-1 font-mono"
           />
         </div>
+
         <Button
           onClick={handleRecharge}
-          disabled={loading || !selectedId || !amount}
+          disabled={loading || !selectedReg || !amount}
           className="w-full bg-accent text-accent-foreground font-mono"
         >
           <Plus className="w-4 h-4 mr-1" />
