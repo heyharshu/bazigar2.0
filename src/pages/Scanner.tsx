@@ -270,7 +270,7 @@ const Scanner = () => {
           <div className="bg-card border rounded-xl p-4 mb-4">
             <p className="text-lg font-bold">{participant.name}</p>
             <p className="text-sm text-muted-foreground">
-              {participant.email || "No email"}
+              {participant.reg || "No Regitration Number"}
             </p>
             <p className="text-3xl text-primary font-mono">
               {participant.points} pts

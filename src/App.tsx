@@ -3,10 +3,13 @@ import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+
 import { ProtectedRoute } from "@/components/ProtectedRoute";
+
 import Login from "./pages/Login";
 import Admin from "./pages/Admin";
 import Scanner from "./pages/Scanner";
+import AdminDashboard from "./pages/AdminDashboard";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -16,12 +19,46 @@ const App = () => (
     <TooltipProvider>
       <Toaster />
       <Sonner />
+
       <BrowserRouter>
         <Routes>
+          {/* Redirect root */}
           <Route path="/" element={<Navigate to="/login" replace />} />
+
+          {/* Login */}
           <Route path="/login" element={<Login />} />
-          <Route path="/admin" element={<ProtectedRoute><Admin /></ProtectedRoute>} />
-          <Route path="/scanner" element={<ProtectedRoute><Scanner /></ProtectedRoute>} />
+
+          {/* Admin Panel (only admin role) */}
+          <Route
+            path="/admin"
+            element={
+              <ProtectedRoute role="admin">
+                <Admin />
+              </ProtectedRoute>
+            }
+          />
+
+          {/* Admin Dashboard (ONLY ADMIN CAN SEE) */}
+          <Route
+            path="/admin/dashboard"
+            element={
+              <ProtectedRoute role="admin">
+                <AdminDashboard />
+              </ProtectedRoute>
+            }
+          />
+
+          {/* Scanner (scanner or admin allowed) */}
+          <Route
+            path="/scanner"
+            element={
+              <ProtectedRoute role="scanner">
+                <Scanner />
+              </ProtectedRoute>
+            }
+          />
+
+          {/* Not Found */}
           <Route path="*" element={<NotFound />} />
         </Routes>
       </BrowserRouter>
