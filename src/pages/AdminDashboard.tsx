@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
-import { StatsCards } from "@/components/StatsCards";
 
+import { StatsCards } from "@/components/admin/StatsCards";
 interface Stats {
   totalParticipants: number;
   totalPoints: number;
