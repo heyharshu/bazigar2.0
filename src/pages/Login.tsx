@@ -21,7 +21,6 @@ const Login = () => {
     setLoading(true);
 
     try {
-      // 🔎 Fetch user by username
       const { data, error } = await supabase
         .from("admin_users")
         .select("*")
@@ -29,37 +28,26 @@ const Login = () => {
         .limit(1);
 
       if (error) throw error;
-
-      if (!data || data.length === 0) {
+      if (!data || data.length === 0)
         throw new Error("Invalid username or password");
-      }
 
       const user = data[0];
 
-      // 🔐 Manual password check
-      if (user.password !== password) {
+      if (user.password !== password)
         throw new Error("Invalid username or password");
-      }
 
-      // 💾 Save session locally
       localStorage.setItem("baazigar_user", JSON.stringify(user));
-      console.log("LOGIN SUCCESS →", user);
-
-      // 📱 Small delay helps mobile routing
-      await new Promise((r) => setTimeout(r, 80));
 
       toast({
         title: "Login successful",
         description: `Welcome ${user.role}`,
       });
 
-      // 🚀 Redirect safely
       if (user.role === "admin") {
         navigate("/admin", { replace: true });
       } else {
         navigate("/scanner", { replace: true });
       }
-
     } catch (err: any) {
       toast({
         title: "Login Failed",
@@ -72,59 +60,79 @@ const Login = () => {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center p-4 bg-background">
-      <div className="w-full max-w-md">
+    <div className="relative min-h-screen flex items-center justify-center overflow-hidden bg-black">
 
-        {/* Logo */}
+      {/* 🔥 Animated Background Glow */}
+      <div className="absolute inset-0 bg-[radial-gradient(circle_at_20%_30%,#7c3aed,transparent_40%),radial-gradient(circle_at_80%_70%,#2563eb,transparent_40%)] animate-pulse" />
+
+      {/* 🌫️ Soft Overlay */}
+      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
+
+      {/* 💎 Login Card */}
+      <div className="relative z-10 w-full max-w-md p-8 rounded-2xl 
+      bg-white/10 backdrop-blur-xl border border-white/20 
+      shadow-[0_0_40px_rgba(139,92,246,0.4)] transition-all duration-500">
+
+        {/* 🎮 Logo Section */}
         <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-primary/10 mb-4">
-            <Gamepad2 className="w-8 h-8 text-primary" />
+          <div className="inline-flex items-center justify-center 
+          w-20 h-20 rounded-3xl bg-gradient-to-br from-purple-600 to-blue-600 
+          shadow-lg shadow-purple-500/40 mb-4 animate-bounce">
+            <Gamepad2 className="w-10 h-10 text-white" />
           </div>
-          <h1 className="text-3xl font-bold font-mono text-primary">
-            BAAZIGAR
+
+          <h1 className="text-4xl font-extrabold tracking-wide 
+          bg-gradient-to-r from-purple-400 to-blue-400 
+          bg-clip-text text-transparent">
+            BAAZIGAR 2.0
           </h1>
-          <p className="text-muted-foreground">QR Points System</p>
+
+          <p className="text-gray-300 mt-2 text-sm">
+            UX Club • VIT Bhopal
+          </p>
         </div>
 
-        {/* Login Card */}
-        <div className="bg-card border border-border rounded-xl p-6 shadow-sm">
-          <form onSubmit={handleLogin} className="space-y-4">
+        {/* 📝 Form */}
+        <form onSubmit={handleLogin} className="space-y-5">
 
-            {/* Username */}
-            <div>
-              <Label>Username</Label>
-              <Input
-                type="text"
-                value={username}
-                onChange={(e) => setUsername(e.target.value)}
-                placeholder="admin"
-                required
-              />
-            </div>
+          <div>
+            <Label className="text-gray-300">Username</Label>
+            <Input
+              type="text"
+              value={username}
+              onChange={(e) => setUsername(e.target.value)}
+              placeholder="Enter username"
+              required
+              className="bg-white/10 border-white/20 text-white 
+              focus:ring-2 focus:ring-purple-500"
+            />
+          </div>
 
-            {/* Password */}
-            <div>
-              <Label>Password</Label>
-              <Input
-                type="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                placeholder="••••••••"
-                required
-              />
-            </div>
+          <div>
+            <Label className="text-gray-300">Password</Label>
+            <Input
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              placeholder="••••••••"
+              required
+              className="bg-white/10 border-white/20 text-white 
+              focus:ring-2 focus:ring-blue-500"
+            />
+          </div>
 
-            {/* Submit */}
-            <Button
-              type="submit"
-              disabled={loading}
-              className="w-full bg-primary text-primary-foreground"
-            >
-              {loading ? "Logging in..." : "Login"}
-            </Button>
+          <Button
+            type="submit"
+            disabled={loading}
+            className="w-full py-3 text-lg font-semibold 
+            bg-gradient-to-r from-purple-600 to-blue-600 
+            hover:scale-105 transition-transform duration-300 
+            shadow-lg shadow-purple-500/40"
+          >
+            {loading ? "Logging in..." : "ENTER ARENA"}
+          </Button>
 
-          </form>
-        </div>
+        </form>
       </div>
     </div>
   );
