@@ -3,7 +3,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { Search, QrCode, RefreshCw } from "lucide-react";
+import { Search, QrCode, RefreshCw, Mail } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -27,7 +27,6 @@ export const ParticipantsTable = ({
 }: ParticipantsTableProps) => {
   const [selectedQR, setSelectedQR] = useState<any>(null);
 
-  // Email dialog state
   const [emailDialog, setEmailDialog] = useState(false);
   const [emailInput, setEmailInput] = useState("");
   const [emailParticipant, setEmailParticipant] = useState<any>(null);
@@ -40,9 +39,7 @@ export const ParticipantsTable = ({
   // Generate QR and save in DB
   const generateQR = async (participant: any) => {
     try {
-      if (!participant?.reg) throw new Error("REG missing");
-
-      const qrDataUrl = await QRCode.toDataURL(participant.reg.trim(), {
+      const qrDataUrl = await QRCode.toDataURL(participant.reg, {
         width: 300,
         margin: 2,
       });
@@ -50,13 +47,13 @@ export const ParticipantsTable = ({
       const { error } = await supabase
         .from("participants")
         .update({ qr_code_url: qrDataUrl })
-        .eq("reg", participant.reg.trim());
+        .eq("reg", participant.reg);
 
       if (error) throw error;
 
       toast({
         title: "QR Generated",
-        description: `QR saved for ${participant.name}`,
+        description: `QR created for ${participant.name}`,
       });
 
       await onRefresh();
@@ -69,59 +66,45 @@ export const ParticipantsTable = ({
     }
   };
 
-  // Send email FREE (mailto)
-  const sendEmailFree = async () => {
+  // Send email via Edge Function
+  const sendEmailAuto = async (participant: any, overrideEmail?: string) => {
     try {
-      if (!emailInput.endsWith("@vitbhopal.ac.in")) {
-        throw new Error("Enter valid VIT Bhopal email");
+      const emailToSend = overrideEmail || participant.email;
+
+      if (!emailToSend) {
+        setEmailParticipant(participant);
+        setEmailInput("");
+        setEmailDialog(true);
+        return;
       }
 
-      if (!emailParticipant?.qr_code_url) {
-        throw new Error("QR not generated");
-      }
-
-      // Save email in DB
-      await supabase
-        .from("participants")
-        .update({ email: emailInput })
-        .eq("reg", emailParticipant.reg);
-
-      // Auto download QR
-      const link = document.createElement("a");
-      link.href = emailParticipant.qr_code_url;
-      link.download = `${emailParticipant.reg}-qr.png`;
-      link.click();
-
-      const subject = encodeURIComponent(
-        `Your QR Code - ${emailParticipant.reg}`
+      const res = await fetch(
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/send-qr-email`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
+          },
+          body: JSON.stringify({
+            name: participant.name,
+            reg: participant.reg,
+            email: emailToSend,
+            qr: participant.qr_code_url,
+          }),
+        }
       );
 
-      const body = encodeURIComponent(`
-Hello ${emailParticipant.name},
-
-Your QR Code for Game Zone is attached.
-
-Registration Number: ${emailParticipant.reg}
-
-Please show this QR at entry.
-
-Regards,
-Game Zone Team
-      `);
-
-      // Open mail app
-      window.location.href = `mailto:${emailInput}?subject=${subject}&body=${body}`;
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
 
       toast({
-        title: "Mail Ready 📩",
-        description: "QR downloaded. Attach it & click send.",
+        title: "Email Sent 📩",
+        description: `QR sent to ${emailToSend}`,
       });
-
-      setEmailDialog(false);
-      setEmailInput("");
     } catch (err: any) {
       toast({
-        title: "Failed",
+        title: "Email Failed",
         description: err.message,
         variant: "destructive",
       });
@@ -142,30 +125,32 @@ Game Zone Team
             placeholder="Search name or reg..."
             value={search}
             onChange={(e) => onSearchChange(e.target.value)}
-            className="pl-9 bg-secondary border-border text-sm"
+            className="pl-9"
           />
         </div>
       </div>
 
       {/* Table */}
-      <div className="overflow-auto max-h-96 rounded-lg border border-border">
+      <div className="overflow-auto max-h-96 border rounded-lg">
         <table className="w-full text-sm">
           <thead className="bg-secondary sticky top-0">
             <tr>
-              <th className="text-left p-3 text-xs">Reg</th>
-              <th className="text-left p-3 text-xs">Name</th>
-              <th className="text-right p-3 text-xs">Points</th>
-              <th className="text-right p-3 text-xs">QR</th>
+              <th className="p-3 text-left">Reg</th>
+              <th className="p-3 text-left">Name</th>
+              <th className="p-3 text-right">Points</th>
+              <th className="p-3 text-right">QR</th>
+              <th className="p-3 text-right">Mail</th>
             </tr>
           </thead>
 
           <tbody>
             {filtered.map((p) => (
-              <tr key={p.reg} className="border-t hover:bg-secondary/50">
+              <tr key={p.reg} className="border-t hover:bg-secondary/40">
                 <td className="p-3">{p.reg}</td>
                 <td className="p-3">{p.name}</td>
                 <td className="p-3 text-right">{p.points}</td>
 
+                {/* QR */}
                 <td className="p-3 text-right">
                   {p.qr_code_url ? (
                     <Button
@@ -185,6 +170,17 @@ Game Zone Team
                     </Button>
                   )}
                 </td>
+
+                {/* Email */}
+                <td className="p-3 text-right">
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={() => sendEmailAuto(p)}
+                  >
+                    <Mail className="w-4 h-4" />
+                  </Button>
+                </td>
               </tr>
             ))}
           </tbody>
@@ -199,22 +195,10 @@ Game Zone Team
           </DialogHeader>
 
           {selectedQR?.qr_code_url && (
-            <div className="flex flex-col items-center gap-4">
-              <img
-                src={selectedQR.qr_code_url}
-                className="w-64 h-64 bg-white p-2 rounded"
-              />
-
-              <Button
-                onClick={() => {
-                  setEmailParticipant(selectedQR);
-                  setEmailInput(selectedQR?.email || "");
-                  setEmailDialog(true);
-                }}
-              >
-                📩 Send QR
-              </Button>
-            </div>
+            <img
+              src={selectedQR.qr_code_url}
+              className="w-64 h-64 mx-auto bg-white p-2 rounded"
+            />
           )}
         </DialogContent>
       </Dialog>
@@ -233,7 +217,19 @@ Game Zone Team
               onChange={(e) => setEmailInput(e.target.value)}
             />
 
-            <Button onClick={sendEmailFree}>Send Email 📩</Button>
+            <Button
+              onClick={async () => {
+                await supabase
+                  .from("participants")
+                  .update({ email: emailInput })
+                  .eq("reg", emailParticipant.reg);
+
+                await sendEmailAuto(emailParticipant, emailInput);
+                setEmailDialog(false);
+              }}
+            >
+              Send Email
+            </Button>
           </div>
         </DialogContent>
       </Dialog>
