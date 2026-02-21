@@ -117,7 +117,7 @@ export const RechargeModal = ({
 
           <Select value={selectedId} onValueChange={setSelectedId}>
             <SelectTrigger className="bg-secondary border-border mt-1">
-              <SelectValue placeholder="Search & select participant" />
+              <SelectValue placeholder="Select Participant" />
             </SelectTrigger>
 
             <SelectContent className="bg-card border-border max-h-72">
@@ -127,7 +127,7 @@ export const RechargeModal = ({
                 <div className="relative">
                   <Search className="w-4 h-4 absolute left-2 top-1/2 -translate-y-1/2 text-muted-foreground" />
                   <Input
-                    placeholder="Search name or reg..."
+                    placeholder="Search Participant "
                     value={search}
                     onChange={(e) => setSearch(e.target.value)}
                     className="pl-7 h-8 text-sm bg-secondary"
@@ -158,7 +158,7 @@ export const RechargeModal = ({
           <Label className="text-xs text-muted-foreground">Amount</Label>
           <Input
             type="number"
-            placeholder="Enter points (e.g. 50)"
+            placeholder="Enter points "
             value={amount}
             onChange={(e) => setAmount(e.target.value)}
             className="bg-secondary border-border mt-1 font-mono"
