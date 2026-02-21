@@ -1,45 +1,32 @@
-import { useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
-import { supabase } from "@/integrations/supabase/client";
+import { Navigate } from "react-router-dom";
 
 interface ProtectedRouteProps {
   children: React.ReactNode;
 }
 
 export const ProtectedRoute = ({ children }: ProtectedRouteProps) => {
-  const navigate = useNavigate();
-  const [loading, setLoading] = useState(true);
-  const [authenticated, setAuthenticated] = useState(false);
+  try {
+    const raw = localStorage.getItem("baazigar_user");
 
-  useEffect(() => {
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
-      if (!session) {
-        navigate("/login");
-      } else {
-        setAuthenticated(true);
-      }
-      setLoading(false);
-    });
+    if (!raw) {
+      console.log("No session → redirect login");
+      return <Navigate to="/login" replace />;
+    }
 
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      if (!session) {
-        navigate("/login");
-      } else {
-        setAuthenticated(true);
-      }
-      setLoading(false);
-    });
+    const user = JSON.parse(raw);
 
-    return () => subscription.unsubscribe();
-  }, [navigate]);
+    if (!user || !user.role) {
+      console.log("Invalid session → redirect login");
+      localStorage.removeItem("baazigar_user");
+      return <Navigate to="/login" replace />;
+    }
 
-  if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-background">
-        <div className="text-primary font-mono animate-pulse-glow text-xl">Loading...</div>
-      </div>
-    );
+    // ✅ session valid → allow access
+    return <>{children}</>;
+
+  } catch (err) {
+    console.log("Session error → redirect login");
+    localStorage.removeItem("baazigar_user");
+    return <Navigate to="/login" replace />;
   }
-
-  return authenticated ? <>{children}</> : null;
 };
