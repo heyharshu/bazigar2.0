@@ -72,7 +72,7 @@ const Admin = () => {
           <div className="flex items-center gap-3">
             <Gamepad2 className="w-6 h-6 text-primary" />
             <h1 className="text-xl font-mono font-bold text-primary">
-              BAAZIGAR
+              BAAZIGAR2.0
             </h1>
             <span className="text-xs bg-primary/10 text-primary px-2 py-1 rounded-md font-mono">
               ADMIN
@@ -95,7 +95,9 @@ const Admin = () => {
         <StatsCards
           totalParticipants={participants.length}
           totalPoints={totalPoints}
-          totalTransactions={transactions.length}
+          totalTransactions={
+  transactions.filter((tx) => tx.type === "deduction").length
+}
         />
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
