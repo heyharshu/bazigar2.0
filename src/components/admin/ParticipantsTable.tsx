@@ -29,7 +29,7 @@ export const ParticipantsTable = ({
 
   const filtered = participants.filter((p) =>
     p.name?.toLowerCase().includes(search.toLowerCase()) ||
-    p.email?.toLowerCase().includes(search.toLowerCase())
+    p.reg?.toLowerCase().includes(search.toLowerCase())
   );
 
   const generateQR = async (participant: any) => {
@@ -99,7 +99,7 @@ export const ParticipantsTable = ({
         <div className="relative w-64">
           <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
           <Input
-            placeholder="Search name or email..."
+            placeholder="Search name or reg..."
             value={search}
             onChange={(e) => onSearchChange(e.target.value)}
             className="pl-9 bg-secondary border-border text-sm"
@@ -111,8 +111,8 @@ export const ParticipantsTable = ({
         <table className="w-full text-sm">
           <thead className="bg-secondary sticky top-0">
             <tr>
+              <th className="text-left p-3 text-xs">Reg No.</th>
               <th className="text-left p-3 text-xs">Name</th>
-              <th className="text-left p-3 text-xs">Email</th>
               <th className="text-right p-3 text-xs">Points</th>
               <th className="text-right p-3 text-xs">QR</th>
             </tr>
@@ -122,7 +122,7 @@ export const ParticipantsTable = ({
             {filtered.map((p) => (
               <tr key={p.reg} className="border-t hover:bg-secondary/50">
                 <td className="p-3 font-medium">{p.name}</td>
-                <td className="p-3 text-muted-foreground">{p.email}</td>
+                <td className="p-3 text-muted-foreground">{p.reg}</td>
                 <td className="p-3 text-right font-mono text-primary">
                   {p.points}
                 </td>
