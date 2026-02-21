@@ -45,50 +45,61 @@ const Scanner = () => {
 
   /* ---------------- Start Scanner ---------------- */
   const startScanner = async () => {
-    setScanState("scanning");
-    setParticipant(null);
+  setScanState("scanning");
+  setParticipant(null);
 
-    try {
-      if (scannerRef.current) {
+  try {
+    // 🔥 FULL CLEANUP (important for phone)
+    if (scannerRef.current) {
+      try {
+        await scannerRef.current.stop();
+      } catch {}
+
+      try {
+        await scannerRef.current.clear();
+      } catch {}
+
+      scannerRef.current = null;
+    }
+
+    const html5Qrcode = new Html5Qrcode(scannerContainerRef.current);
+    scannerRef.current = html5Qrcode;
+
+    await html5Qrcode.start(
+      { facingMode: "environment" },
+      { fps: 10, qrbox: { width: 250, height: 250 } },
+      async (decodedText) => {
         try {
-          await scannerRef.current.stop();
+          await html5Qrcode.stop();
+          await html5Qrcode.clear();
         } catch {}
-      }
 
-      const html5Qrcode = new Html5Qrcode(scannerContainerRef.current);
-      scannerRef.current = html5Qrcode;
+        scannerRef.current = null;
+        handleScan(decodedText); // decodedText = REG
+      },
+      () => {}
+    );
+  } catch (err) {
+    console.error("Camera restart error:", err);
+    toast({
+      title: "Camera Error",
+      description: "Camera restart failed. Refresh once.",
+      variant: "destructive",
+    });
+  }
+};
 
-      await html5Qrcode.start(
-        { facingMode: "environment" },
-        { fps: 10, qrbox: { width: 250, height: 250 } },
-        async (decodedText) => {
-          try {
-            await html5Qrcode.stop();
-          } catch {}
-          handleScan(decodedText); // decodedText = REG
-        },
-        () => {}
-      );
-    } catch {
-      toast({
-        title: "Camera Error",
-        description: "Allow camera permission",
-        variant: "destructive",
-      });
+ useEffect(() => {
+  startScanner();
+
+  return () => {
+    if (scannerRef.current) {
+      scannerRef.current.stop().catch(() => {});
+      scannerRef.current.clear().catch(() => {});
+      scannerRef.current = null;
     }
   };
-
-  useEffect(() => {
-    startScanner();
-    return () => {
-      if (scannerRef.current) {
-        try {
-          scannerRef.current.stop();
-        } catch {}
-      }
-    };
-  }, []);
-
+}, []);
   /* ---------------- Handle Scan (REG based) ---------------- */
   const handleScan = async (reg: string) => {
     const { data, error } = await supabase
