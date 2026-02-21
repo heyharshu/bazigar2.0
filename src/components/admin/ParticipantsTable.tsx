@@ -121,8 +121,8 @@ export const ParticipantsTable = ({
           <tbody>
             {filtered.map((p) => (
               <tr key={p.reg} className="border-t hover:bg-secondary/50">
-                <td className="p-3 font-medium">{p.name}</td>
-                <td className="p-3 text-muted-foreground">{p.reg}</td>
+                <td className="p-3 font-medium">{p.reg}</td>
+                <td className="p-3 text-muted-foreground">{p.name}</td>
                 <td className="p-3 text-right font-mono text-primary">
                   {p.points}
                 </td>
