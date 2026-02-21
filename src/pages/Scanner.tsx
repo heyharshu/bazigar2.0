@@ -18,16 +18,64 @@ type ScanState = "scanning" | "scanned" | "success" | "error";
 
 const Scanner = () => {
   const navigate = useNavigate();
+
   const [scanState, setScanState] = useState<ScanState>("scanning");
   const [participant, setParticipant] = useState<any>(null);
   const [games, setGames] = useState<any[]>([]);
   const [leaderboard, setLeaderboard] = useState<any[]>([]);
   const [errorMessage, setErrorMessage] = useState("");
+  const [scannerUser, setScannerUser] = useState("organizer");
 
   const scannerRef = useRef<Html5Qrcode | null>(null);
   const scannerContainerId = "qr-reader";
 
+  /* ================= SOUND + VIBRATION ================= */
+
+  const vibrate = (pattern: number | number[]) => {
+    if (navigator.vibrate) {
+      navigator.vibrate(pattern);
+    }
+  };
+
+  const playBeep = (frequency: number, duration = 120) => {
+    try {
+      const audioCtx = new (window.AudioContext ||
+        (window as any).webkitAudioContext)();
+      const oscillator = audioCtx.createOscillator();
+      const gainNode = audioCtx.createGain();
+
+      oscillator.connect(gainNode);
+      gainNode.connect(audioCtx.destination);
+
+      oscillator.type = "sine";
+      oscillator.frequency.value = frequency;
+
+      oscillator.start();
+      gainNode.gain.exponentialRampToValueAtTime(
+        0.00001,
+        audioCtx.currentTime + duration / 1000
+      );
+
+      setTimeout(() => {
+        oscillator.stop();
+        audioCtx.close();
+      }, duration);
+    } catch {}
+  };
+
+  const playSuccessFeedback = () => {
+    playBeep(880, 120);
+    setTimeout(() => playBeep(1200, 120), 140);
+    vibrate([120, 40, 120]); // 📳 strong vibration
+  };
+
+  const playErrorFeedback = () => {
+    playBeep(220, 220);
+    vibrate(200); // 📳 short vibration
+  };
+
   /* ================= LOAD DATA ================= */
+
   const loadData = async () => {
     const { data: g } = await supabase.from("games").select("*").order("name");
 
@@ -43,9 +91,18 @@ const Scanner = () => {
 
   useEffect(() => {
     loadData();
+
+    supabase.auth.getUser().then(({ data }) => {
+      const userName =
+        data?.user?.user_metadata?.name ||
+        data?.user?.email ||
+        "organizer";
+      setScannerUser(userName);
+    });
   }, []);
 
-  /* ================= SAFE SCANNER STOP ================= */
+  /* ================= SCANNER CONTROL ================= */
+
   const stopScanner = async () => {
     if (scannerRef.current) {
       try {
@@ -57,13 +114,10 @@ const Scanner = () => {
       } catch {}
 
       scannerRef.current = null;
-
-      // Important delay for mobile camera release
-      await new Promise((res) => setTimeout(res, 400));
+      await new Promise((res) => setTimeout(res, 350));
     }
   };
 
-  /* ================= START SCANNER ================= */
   const startScanner = async () => {
     try {
       setScanState("scanning");
@@ -77,36 +131,28 @@ const Scanner = () => {
 
       await html5Qrcode.start(
         { facingMode: "environment" },
-        {
-          fps: 10,
-          qrbox: { width: 250, height: 250 },
-        },
+        { fps: 10, qrbox: { width: 250, height: 250 } },
         async (decodedText) => {
           await stopScanner();
           handleScan(decodedText);
-        },
-        () => {}
+        }
       );
     } catch (err) {
-      console.error("Camera restart error:", err);
       toast({
         title: "Camera Error",
-        description: "If issue persists, refresh once.",
+        description: "Refresh if camera fails.",
         variant: "destructive",
       });
     }
   };
 
-  /* ================= INITIAL MOUNT ================= */
   useEffect(() => {
     startScanner();
-
-    return () => {
-      stopScanner();
-    };
+    return () => stopScanner();
   }, []);
 
   /* ================= HANDLE SCAN ================= */
+
   const handleScan = async (reg: string) => {
     const { data, error } = await supabase
       .from("participants")
@@ -115,6 +161,7 @@ const Scanner = () => {
       .single();
 
     if (error || !data) {
+      playErrorFeedback();
       setErrorMessage("Participant not found");
       setScanState("error");
       return;
@@ -124,11 +171,13 @@ const Scanner = () => {
     setScanState("scanned");
   };
 
-  /* ================= DEDUCT POINTS ================= */
+  /* ================= DEDUCT ================= */
+
   const handleDeduct = async (game: any) => {
     if (!participant) return;
 
     if (participant.points < game.cost) {
+      playErrorFeedback();
       setErrorMessage(
         `Insufficient points! Need ${game.cost}, has ${participant.points}`
       );
@@ -138,45 +187,46 @@ const Scanner = () => {
 
     const newPoints = participant.points - game.cost;
 
-    const { error } = await supabase
-      .from("participants")
-      .update({ points: newPoints })
-      .eq("reg", participant.reg);
+    try {
+      await supabase
+        .from("participants")
+        .update({ points: newPoints })
+        .eq("reg", participant.reg);
 
-    if (error) {
-      setErrorMessage("Deduction failed");
+      await supabase.from("transactions").insert({
+        participant_reg: participant.reg,
+        game_id: game.id,
+        game_name: game.name,
+        points_change: -game.cost,
+        type: "deduction",
+        scanned_by: scannerUser,
+      });
+
+      setParticipant({ ...participant, points: newPoints });
+      setScanState("success");
+      playSuccessFeedback();
+      loadData();
+
+      toast({
+        title: "Points Deducted",
+        description: `${game.cost} pts for ${game.name}`,
+      });
+    } catch (err: any) {
+      playErrorFeedback();
+      setErrorMessage("Transaction failed");
       setScanState("error");
-      return;
     }
-
-    await supabase.from("transactions").insert({
-      reg: participant.reg,
-      game_name: game.name,
-      points_change: -game.cost,
-      type: "deduction",
-      scanned_by: "organizer",
-    });
-
-    setParticipant({ ...participant, points: newPoints });
-    setScanState("success");
-    loadData();
-
-    toast({
-      title: "Points Deducted",
-      description: `${game.cost} pts for ${game.name}`,
-    });
   };
 
-  /* ================= LOGOUT ================= */
   const handleLogout = () => {
     stopScanner();
     navigate("/login");
   };
 
-  /* ============================================================ */
+  /* ================= UI ================= */
+
   return (
     <div className="min-h-screen bg-background flex flex-col">
-      {/* HEADER */}
       <header className="border-b bg-card p-3 flex justify-between">
         <div className="flex gap-2 items-center">
           <Gamepad2 className="w-5 h-5 text-primary" />
@@ -187,7 +237,6 @@ const Scanner = () => {
         </Button>
       </header>
 
-      {/* ================= SCANNING ================= */}
       {scanState === "scanning" && (
         <div className="flex-1 flex flex-col items-center justify-center p-4">
           <div id={scannerContainerId} className="w-full max-w-sm" />
@@ -196,7 +245,6 @@ const Scanner = () => {
             Scan QR
           </p>
 
-          {/* Leaderboard */}
           <div className="mt-8 w-full max-w-sm bg-card border rounded-xl p-4">
             <p className="font-mono text-sm mb-2 flex items-center gap-2">
               <Trophy className="w-4 h-4 text-yellow-400" />
@@ -205,9 +253,7 @@ const Scanner = () => {
 
             {leaderboard.map((p, i) => (
               <div key={i} className="flex justify-between text-sm py-1">
-                <span>
-                  {i + 1}. {p.name}
-                </span>
+                <span>{i + 1}. {p.name}</span>
                 <span className="text-primary font-mono">{p.points}</span>
               </div>
             ))}
@@ -215,49 +261,10 @@ const Scanner = () => {
         </div>
       )}
 
-      {/* ================= PARTICIPANT ================= */}
-      {scanState === "scanned" && participant && (
-        <div className="p-4 flex-1">
-          <div className="bg-card border rounded-xl p-4 mb-4">
-            <p className="text-lg font-bold">{participant.name}</p>
-            <p className="text-sm text-muted-foreground">
-              {participant.email}
-            </p>
-            <p className="text-3xl text-primary font-mono">
-              {participant.points} pts
-            </p>
-          </div>
-
-          <div className="grid grid-cols-2 gap-3">
-            {games.map((game) => (
-              <button
-                key={game.id}
-                onClick={() => handleDeduct(game)}
-                disabled={participant.points < game.cost}
-                className={`p-4 rounded-xl border ${
-                  participant.points >= game.cost
-                    ? "bg-secondary hover:border-primary"
-                    : "opacity-50 cursor-not-allowed"
-                }`}
-              >
-                <p>{game.name}</p>
-                <p className="text-xs text-primary">{game.cost} pts</p>
-              </button>
-            ))}
-          </div>
-
-          <Button className="mt-4 w-full" onClick={startScanner}>
-            <ArrowLeft className="w-4 h-4 mr-2" />
-            Scan Another
-          </Button>
-        </div>
-      )}
-
-      {/* ================= SUCCESS ================= */}
       {scanState === "success" && (
         <div className="flex-1 flex flex-col items-center justify-center">
           <CheckCircle2 className="w-20 h-20 text-green-500 mb-4" />
-          <p className="text-xl font-bold">Points Deducted</p>
+          <p className="text-xl font-bold">Success</p>
           <p>{participant?.name}</p>
           <p className="text-primary">{participant?.points} pts</p>
           <Button className="mt-6" onClick={startScanner}>
@@ -266,7 +273,6 @@ const Scanner = () => {
         </div>
       )}
 
-      {/* ================= ERROR ================= */}
       {scanState === "error" && (
         <div className="flex-1 flex flex-col items-center justify-center">
           <XCircle className="w-20 h-20 text-red-500 mb-4" />
