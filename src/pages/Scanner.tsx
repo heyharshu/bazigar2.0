@@ -32,46 +32,44 @@ const Scanner = () => {
   /* ================= SOUND + VIBRATION ================= */
 
   const vibrate = (pattern: number | number[]) => {
-    if (navigator.vibrate) {
-      navigator.vibrate(pattern);
-    }
+    if (navigator.vibrate) navigator.vibrate(pattern);
   };
 
   const playBeep = (frequency: number, duration = 120) => {
     try {
-      const audioCtx = new (window.AudioContext ||
+      const ctx = new (window.AudioContext ||
         (window as any).webkitAudioContext)();
-      const oscillator = audioCtx.createOscillator();
-      const gainNode = audioCtx.createGain();
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
 
-      oscillator.connect(gainNode);
-      gainNode.connect(audioCtx.destination);
+      osc.connect(gain);
+      gain.connect(ctx.destination);
 
-      oscillator.type = "sine";
-      oscillator.frequency.value = frequency;
+      osc.type = "sine";
+      osc.frequency.value = frequency;
 
-      oscillator.start();
-      gainNode.gain.exponentialRampToValueAtTime(
+      osc.start();
+      gain.gain.exponentialRampToValueAtTime(
         0.00001,
-        audioCtx.currentTime + duration / 1000
+        ctx.currentTime + duration / 1000
       );
 
       setTimeout(() => {
-        oscillator.stop();
-        audioCtx.close();
+        osc.stop();
+        ctx.close();
       }, duration);
     } catch {}
   };
 
-  const playSuccessFeedback = () => {
-    playBeep(880, 120);
+  const successFeedback = () => {
+    playBeep(900, 120);
     setTimeout(() => playBeep(1200, 120), 140);
-    vibrate([120, 40, 120]); // 📳 strong vibration
+    vibrate([120, 40, 120]);
   };
 
-  const playErrorFeedback = () => {
-    playBeep(220, 220);
-    vibrate(200); // 📳 short vibration
+  const errorFeedback = () => {
+    playBeep(200, 200);
+    vibrate(200);
   };
 
   /* ================= LOAD DATA ================= */
@@ -126,10 +124,10 @@ const Scanner = () => {
 
       await stopScanner();
 
-      const html5Qrcode = new Html5Qrcode(scannerContainerId);
-      scannerRef.current = html5Qrcode;
+      const scanner = new Html5Qrcode(scannerContainerId);
+      scannerRef.current = scanner;
 
-      await html5Qrcode.start(
+      await scanner.start(
         { facingMode: "environment" },
         { fps: 10, qrbox: { width: 250, height: 250 } },
         async (decodedText) => {
@@ -137,7 +135,7 @@ const Scanner = () => {
           handleScan(decodedText);
         }
       );
-    } catch (err) {
+    } catch {
       toast({
         title: "Camera Error",
         description: "Refresh if camera fails.",
@@ -161,7 +159,7 @@ const Scanner = () => {
       .single();
 
     if (error || !data) {
-      playErrorFeedback();
+      errorFeedback();
       setErrorMessage("Participant not found");
       setScanState("error");
       return;
@@ -177,7 +175,7 @@ const Scanner = () => {
     if (!participant) return;
 
     if (participant.points < game.cost) {
-      playErrorFeedback();
+      errorFeedback();
       setErrorMessage(
         `Insufficient points! Need ${game.cost}, has ${participant.points}`
       );
@@ -204,7 +202,7 @@ const Scanner = () => {
 
       setParticipant({ ...participant, points: newPoints });
       setScanState("success");
-      playSuccessFeedback();
+      successFeedback();
       loadData();
 
       toast({
@@ -212,7 +210,7 @@ const Scanner = () => {
         description: `${game.cost} pts for ${game.name}`,
       });
     } catch (err: any) {
-      playErrorFeedback();
+      errorFeedback();
       setErrorMessage("Transaction failed");
       setScanState("error");
     }
@@ -227,16 +225,20 @@ const Scanner = () => {
 
   return (
     <div className="min-h-screen bg-background flex flex-col">
+      {/* HEADER */}
       <header className="border-b bg-card p-3 flex justify-between">
         <div className="flex gap-2 items-center">
           <Gamepad2 className="w-5 h-5 text-primary" />
-          <span className="font-bold font-mono text-primary">BAAZIGAR</span>
+          <span className="font-bold font-mono text-primary">
+            BAAZIGAR
+          </span>
         </div>
         <Button size="sm" variant="ghost" onClick={handleLogout}>
           <LogOut className="w-4 h-4" />
         </Button>
       </header>
 
+      {/* SCANNING */}
       {scanState === "scanning" && (
         <div className="flex-1 flex flex-col items-center justify-center p-4">
           <div id={scannerContainerId} className="w-full max-w-sm" />
@@ -245,6 +247,7 @@ const Scanner = () => {
             Scan QR
           </p>
 
+          {/* Leaderboard */}
           <div className="mt-8 w-full max-w-sm bg-card border rounded-xl p-4">
             <p className="font-mono text-sm mb-2 flex items-center gap-2">
               <Trophy className="w-4 h-4 text-yellow-400" />
@@ -261,6 +264,45 @@ const Scanner = () => {
         </div>
       )}
 
+      {/* PARTICIPANT + GAMES */}
+      {scanState === "scanned" && participant && (
+        <div className="p-4 flex-1">
+          <div className="bg-card border rounded-xl p-4 mb-4">
+            <p className="text-lg font-bold">{participant.name}</p>
+            <p className="text-sm text-muted-foreground">
+              {participant.email || "No email"}
+            </p>
+            <p className="text-3xl text-primary font-mono">
+              {participant.points} pts
+            </p>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            {games.map((game) => (
+              <button
+                key={game.id}
+                onClick={() => handleDeduct(game)}
+                disabled={participant.points < game.cost}
+                className={`p-4 rounded-xl border transition ${
+                  participant.points >= game.cost
+                    ? "bg-secondary hover:border-primary"
+                    : "opacity-50 cursor-not-allowed"
+                }`}
+              >
+                <p>{game.name}</p>
+                <p className="text-xs text-primary">{game.cost} pts</p>
+              </button>
+            ))}
+          </div>
+
+          <Button className="mt-4 w-full" onClick={startScanner}>
+            <ArrowLeft className="w-4 h-4 mr-2" />
+            Scan Another
+          </Button>
+        </div>
+      )}
+
+      {/* SUCCESS */}
       {scanState === "success" && (
         <div className="flex-1 flex flex-col items-center justify-center">
           <CheckCircle2 className="w-20 h-20 text-green-500 mb-4" />
@@ -273,6 +315,7 @@ const Scanner = () => {
         </div>
       )}
 
+      {/* ERROR */}
       {scanState === "error" && (
         <div className="flex-1 flex flex-col items-center justify-center">
           <XCircle className="w-20 h-20 text-red-500 mb-4" />
