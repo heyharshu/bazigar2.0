@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
@@ -11,7 +11,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Plus, Zap } from "lucide-react";
+import { Plus, Zap, Search } from "lucide-react";
 
 interface RechargeModalProps {
   participants: any[];
@@ -25,6 +25,19 @@ export const RechargeModal = ({
   const [selectedId, setSelectedId] = useState("");
   const [amount, setAmount] = useState("");
   const [loading, setLoading] = useState(false);
+  const [search, setSearch] = useState("");
+
+  // 🔍 Filter participants by name or reg
+  const filteredParticipants = useMemo(() => {
+    if (!search) return participants;
+
+    const s = search.toLowerCase();
+    return participants.filter(
+      (p) =>
+        p.name?.toLowerCase().includes(s) ||
+        p.reg?.toLowerCase().includes(s)
+    );
+  }, [participants, search]);
 
   const handleRecharge = async () => {
     if (!selectedId || !amount) return;
@@ -48,7 +61,7 @@ export const RechargeModal = ({
     setLoading(true);
 
     try {
-      // 🔹 Update participant points
+      // Update points
       const { error: updateError } = await supabase
         .from("participants")
         .update({ points: participant.points + pts })
@@ -56,13 +69,13 @@ export const RechargeModal = ({
 
       if (updateError) throw updateError;
 
-      // 🔹 Insert transaction log
+      // Log transaction
       const { error: txError } = await supabase.from("transactions").insert({
-  participant_reg: selectedId,   // ← correct column
-  points_change: pts,
-  type: "recharge",
-  scanned_by: "admin",
-});
+        participant_reg: selectedId,
+        points_change: pts,
+        type: "recharge",
+        scanned_by: "admin",
+      });
 
       if (txError) throw txError;
 
@@ -73,6 +86,7 @@ export const RechargeModal = ({
 
       setSelectedId("");
       setAmount("");
+      setSearch("");
       onRecharged();
     } catch (err: any) {
       console.error(err);
@@ -94,7 +108,8 @@ export const RechargeModal = ({
       </h3>
 
       <div className="space-y-3">
-        {/* Participant Select */}
+
+        {/* Participant Select with Search */}
         <div>
           <Label className="text-xs text-muted-foreground">
             Participant
@@ -102,24 +117,45 @@ export const RechargeModal = ({
 
           <Select value={selectedId} onValueChange={setSelectedId}>
             <SelectTrigger className="bg-secondary border-border mt-1">
-              <SelectValue placeholder="Select participant" />
+              <SelectValue placeholder="Search & select participant" />
             </SelectTrigger>
 
-            <SelectContent className="bg-card border-border max-h-60 overflow-auto">
-              {participants.map((p) => (
-                <SelectItem key={p.reg} value={p.reg}>
-                  {p.name} ({p.points} pts)
-                </SelectItem>
-              ))}
+            <SelectContent className="bg-card border-border max-h-72">
+
+              {/* 🔍 Search box */}
+              <div className="p-2 border-b border-border sticky top-0 bg-card">
+                <div className="relative">
+                  <Search className="w-4 h-4 absolute left-2 top-1/2 -translate-y-1/2 text-muted-foreground" />
+                  <Input
+                    placeholder="Search name or reg..."
+                    value={search}
+                    onChange={(e) => setSearch(e.target.value)}
+                    className="pl-7 h-8 text-sm bg-secondary"
+                  />
+                </div>
+              </div>
+
+              {/* List */}
+              <div className="max-h-60 overflow-auto">
+                {filteredParticipants.length === 0 && (
+                  <div className="p-3 text-xs text-muted-foreground text-center">
+                    No participant found
+                  </div>
+                )}
+
+                {filteredParticipants.map((p) => (
+                  <SelectItem key={p.reg} value={p.reg}>
+                    {p.name} — {p.reg} ({p.points} pts)
+                  </SelectItem>
+                ))}
+              </div>
             </SelectContent>
           </Select>
         </div>
 
         {/* Amount */}
         <div>
-          <Label className="text-xs text-muted-foreground">
-            Amount
-          </Label>
+          <Label className="text-xs text-muted-foreground">Amount</Label>
           <Input
             type="number"
             placeholder="Enter points (e.g. 50)"
