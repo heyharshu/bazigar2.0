@@ -23,12 +23,14 @@ const Scanner = () => {
   const [games, setGames] = useState<any[]>([]);
   const [leaderboard, setLeaderboard] = useState<any[]>([]);
   const [errorMessage, setErrorMessage] = useState("");
-  const scannerRef = useRef<Html5Qrcode | null>(null);
-  const scannerContainerRef = useRef<string>("qr-reader");
 
-  /* ---------------- Load Games + Leaderboard ---------------- */
+  const scannerRef = useRef<Html5Qrcode | null>(null);
+  const scannerContainerId = "qr-reader";
+
+  /* ================= LOAD DATA ================= */
   const loadData = async () => {
     const { data: g } = await supabase.from("games").select("*").order("name");
+
     const { data: l } = await supabase
       .from("participants")
       .select("name, points")
@@ -43,13 +45,8 @@ const Scanner = () => {
     loadData();
   }, []);
 
-  /* ---------------- Start Scanner ---------------- */
-  const startScanner = async () => {
-  setScanState("scanning");
-  setParticipant(null);
-
-  try {
-    // 🔥 FULL CLEANUP (important for phone)
+  /* ================= SAFE SCANNER STOP ================= */
+  const stopScanner = async () => {
     if (scannerRef.current) {
       try {
         await scannerRef.current.stop();
@@ -60,47 +57,56 @@ const Scanner = () => {
       } catch {}
 
       scannerRef.current = null;
-    }
 
-    const html5Qrcode = new Html5Qrcode(scannerContainerRef.current);
-    scannerRef.current = html5Qrcode;
-
-    await html5Qrcode.start(
-      { facingMode: "environment" },
-      { fps: 10, qrbox: { width: 250, height: 250 } },
-      async (decodedText) => {
-        try {
-          await html5Qrcode.stop();
-          await html5Qrcode.clear();
-        } catch {}
-
-        scannerRef.current = null;
-        handleScan(decodedText); // decodedText = REG
-      },
-      () => {}
-    );
-  } catch (err) {
-    console.error("Camera restart error:", err);
-    toast({
-      title: "Camera Error",
-      description: "Camera restart failed. Refresh once.",
-      variant: "destructive",
-    });
-  }
-};
-
- useEffect(() => {
-  startScanner();
-
-  return () => {
-    if (scannerRef.current) {
-      scannerRef.current.stop().catch(() => {});
-      scannerRef.current.clear().catch(() => {});
-      scannerRef.current = null;
+      // Important delay for mobile camera release
+      await new Promise((res) => setTimeout(res, 400));
     }
   };
-}, []);
-  /* ---------------- Handle Scan (REG based) ---------------- */
+
+  /* ================= START SCANNER ================= */
+  const startScanner = async () => {
+    try {
+      setScanState("scanning");
+      setParticipant(null);
+      setErrorMessage("");
+
+      await stopScanner();
+
+      const html5Qrcode = new Html5Qrcode(scannerContainerId);
+      scannerRef.current = html5Qrcode;
+
+      await html5Qrcode.start(
+        { facingMode: "environment" },
+        {
+          fps: 10,
+          qrbox: { width: 250, height: 250 },
+        },
+        async (decodedText) => {
+          await stopScanner();
+          handleScan(decodedText);
+        },
+        () => {}
+      );
+    } catch (err) {
+      console.error("Camera restart error:", err);
+      toast({
+        title: "Camera Error",
+        description: "If issue persists, refresh once.",
+        variant: "destructive",
+      });
+    }
+  };
+
+  /* ================= INITIAL MOUNT ================= */
+  useEffect(() => {
+    startScanner();
+
+    return () => {
+      stopScanner();
+    };
+  }, []);
+
+  /* ================= HANDLE SCAN ================= */
   const handleScan = async (reg: string) => {
     const { data, error } = await supabase
       .from("participants")
@@ -118,7 +124,7 @@ const Scanner = () => {
     setScanState("scanned");
   };
 
-  /* ---------------- Deduct Points ---------------- */
+  /* ================= DEDUCT POINTS ================= */
   const handleDeduct = async (game: any) => {
     if (!participant) return;
 
@@ -161,8 +167,9 @@ const Scanner = () => {
     });
   };
 
-  /* ---------------- Logout ---------------- */
-  const handleLogout = async () => {
+  /* ================= LOGOUT ================= */
+  const handleLogout = () => {
+    stopScanner();
     navigate("/login");
   };
 
@@ -183,7 +190,7 @@ const Scanner = () => {
       {/* ================= SCANNING ================= */}
       {scanState === "scanning" && (
         <div className="flex-1 flex flex-col items-center justify-center p-4">
-          <div id={scannerContainerRef.current} className="w-full max-w-sm" />
+          <div id={scannerContainerId} className="w-full max-w-sm" />
           <p className="mt-3 text-sm text-muted-foreground font-mono">
             <ScanLine className="inline w-4 h-4 mr-1" />
             Scan QR
@@ -198,7 +205,9 @@ const Scanner = () => {
 
             {leaderboard.map((p, i) => (
               <div key={i} className="flex justify-between text-sm py-1">
-                <span>{i + 1}. {p.name}</span>
+                <span>
+                  {i + 1}. {p.name}
+                </span>
                 <span className="text-primary font-mono">{p.points}</span>
               </div>
             ))}
@@ -211,7 +220,9 @@ const Scanner = () => {
         <div className="p-4 flex-1">
           <div className="bg-card border rounded-xl p-4 mb-4">
             <p className="text-lg font-bold">{participant.name}</p>
-            <p className="text-sm text-muted-foreground">{participant.email}</p>
+            <p className="text-sm text-muted-foreground">
+              {participant.email}
+            </p>
             <p className="text-3xl text-primary font-mono">
               {participant.points} pts
             </p>
