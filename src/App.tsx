@@ -9,7 +9,7 @@ import { ProtectedRoute } from "@/components/ProtectedRoute";
 import Login from "./pages/Login";
 import Admin from "./pages/Admin";
 import Scanner from "./pages/Scanner";
-import AdminDashboard from "./pages/AdminDashboard";
+
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -38,16 +38,7 @@ const App = () => (
             }
           />
 
-          {/* Admin Dashboard (ONLY ADMIN CAN SEE) */}
-          <Route
-            path="/admin/dashboard"
-            element={
-              <ProtectedRoute role="admin">
-                <AdminDashboard />
-              </ProtectedRoute>
-            }
-          />
-
+          
           {/* Scanner (scanner or admin allowed) */}
           <Route
             path="/scanner"
