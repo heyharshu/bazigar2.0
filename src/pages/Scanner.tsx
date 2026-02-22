@@ -15,10 +15,11 @@ import {
 import { Html5Qrcode } from "html5-qrcode";
 import { useAutoLogout } from "@/hooks/useAutoLogout";
 
-useAutoLogout(20 * 60 * 1000); // 5 min
+
 type ScanState = "scanning" | "scanned" | "success" | "error";
 
 const Scanner = () => {
+  useAutoLogout(20 * 60 * 1000); // 5 min
   const navigate = useNavigate();
 
   const [scanState, setScanState] = useState<ScanState>("scanning");
