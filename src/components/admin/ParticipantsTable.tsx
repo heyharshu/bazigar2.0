@@ -26,10 +26,10 @@ export const ParticipantsTable = ({
   onRefresh,
 }: ParticipantsTableProps) => {
   const [selectedQR, setSelectedQR] = useState<any>(null);
-
   const [emailDialog, setEmailDialog] = useState(false);
   const [emailInput, setEmailInput] = useState("");
   const [emailParticipant, setEmailParticipant] = useState<any>(null);
+  const [sending, setSending] = useState(false); // 🔥 prevent double click
 
   const filtered = participants.filter((p) =>
     p.name?.toLowerCase().includes(search.toLowerCase()) ||
@@ -40,8 +40,8 @@ export const ParticipantsTable = ({
   const generateQR = async (participant: any) => {
     try {
       const qrDataUrl = await QRCode.toDataURL(participant.reg, {
-        width: 300,
-        margin: 2,
+        width: 200,
+        margin: 1,
       });
 
       const { error } = await supabase
@@ -66,7 +66,7 @@ export const ParticipantsTable = ({
     }
   };
 
-  // Send email via Edge Function
+  // 🔥 Async Email Sender (Instant UI)
   const sendEmailAuto = async (participant: any, overrideEmail?: string) => {
     try {
       const emailToSend = overrideEmail || participant.email;
@@ -78,7 +78,10 @@ export const ParticipantsTable = ({
         return;
       }
 
-      const res = await fetch(
+      setSending(true);
+
+      // 🔥 Fire in background (NO await)
+      fetch(
         `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/send-qr-email`,
         {
           method: "POST",
@@ -93,16 +96,24 @@ export const ParticipantsTable = ({
             qr: participant.qr_code_url,
           }),
         }
-      );
+      ).catch(() => {});
 
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error);
-
+      // ⚡ Instant notification
       toast({
         title: "Email Sent 📩",
         description: `QR sent to ${emailToSend}`,
       });
+
+      // 🔄 Refresh table in background
+      onRefresh();
+
+      // 🛑 Prevent double click for 1 second
+      setTimeout(() => {
+        setSending(false);
+      }, 1000);
+
     } catch (err: any) {
+      setSending(false);
       toast({
         title: "Email Failed",
         description: err.message,
@@ -122,7 +133,7 @@ export const ParticipantsTable = ({
         <div className="relative w-64">
           <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
           <Input
-            placeholder="Search name or reg..."
+            placeholder="Search "
             value={search}
             onChange={(e) => onSearchChange(e.target.value)}
             className="pl-9"
@@ -176,6 +187,7 @@ export const ParticipantsTable = ({
                   <Button
                     size="sm"
                     variant="ghost"
+                    disabled={sending}
                     onClick={() => sendEmailAuto(p)}
                   >
                     <Mail className="w-4 h-4" />
@@ -218,17 +230,18 @@ export const ParticipantsTable = ({
             />
 
             <Button
+              disabled={sending}
               onClick={async () => {
                 await supabase
                   .from("participants")
                   .update({ email: emailInput })
                   .eq("reg", emailParticipant.reg);
 
-                await sendEmailAuto(emailParticipant, emailInput);
+                sendEmailAuto(emailParticipant, emailInput);
                 setEmailDialog(false);
               }}
             >
-              Send Email
+              {sending ? "Sending..." : "Send Email"}
             </Button>
           </div>
         </DialogContent>
