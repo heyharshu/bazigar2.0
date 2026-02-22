@@ -1,61 +1,55 @@
 import { Navigate } from "react-router-dom";
 import { useEffect, useState } from "react";
-import { supabase } from "@/integrations/supabase/client";
 
 interface ProtectedRouteProps {
   children: React.ReactNode;
-  allowedRole?: "admin" | "organizer" | "scanner";
+  allowedRole?: "admin" | "organizer";
 }
 
-export const ProtectedRoute = ({
-  children,
-  allowedRole,
-}: ProtectedRouteProps) => {
-  const [loading, setLoading] = useState(true);
-  const [authorized, setAuthorized] = useState(false);
+export const ProtectedRoute = ({ children, allowedRole }: ProtectedRouteProps) => {
+  const [status, setStatus] = useState<"loading" | "ok" | "fail">("loading");
 
   useEffect(() => {
-    const checkAuth = async () => {
-      // 🔐 Get real session
-      const {
-        data: { session },
-      } = await supabase.auth.getSession();
+    try {
+      const raw = localStorage.getItem("baazigar_session");
 
-      if (!session) {
-        setAuthorized(false);
-        setLoading(false);
+      if (!raw) {
+        setStatus("fail");
         return;
       }
 
-      // 🔐 Fetch role from DB (never trust localStorage)
-      const { data, error } = await supabase
-        .from("users")
-        .select("role")
-        .eq("id", session.user.id)
-        .single();
+      const session = JSON.parse(raw);
 
-      if (error || !data) {
-        setAuthorized(false);
-        setLoading(false);
+      if (!session?.id || !session?.role) {
+        localStorage.removeItem("baazigar_session");
+        setStatus("fail");
         return;
       }
 
       // 🔐 Role check
-      if (allowedRole && data.role !== allowedRole) {
-        setAuthorized(false);
-      } else {
-        setAuthorized(true);
+      if (allowedRole && session.role !== allowedRole) {
+        setStatus("fail");
+        return;
       }
 
-      setLoading(false);
-    };
-
-    checkAuth();
+      setStatus("ok");
+    } catch {
+      localStorage.removeItem("baazigar_session");
+      setStatus("fail");
+    }
   }, [allowedRole]);
 
-  if (loading) return null;
+  if (status === "loading") {
+    return (
+      <div className="h-screen flex items-center justify-center text-sm">
+        Checking session...
+      </div>
+    );
+  }
 
-  if (!authorized) return <Navigate to="/login" replace />;
+  if (status === "fail") {
+    return <Navigate to="/login" replace />;
+  }
 
   return <>{children}</>;
 };
