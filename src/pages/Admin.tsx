@@ -72,7 +72,7 @@ const Admin = () => {
           <div className="flex items-center gap-3">
             <Gamepad2 className="w-6 h-6 text-primary" />
             <h1 className="text-xl font-mono font-bold text-primary">
-              BAAZIGAR2.0
+              BAAZIGAR 2.0
             </h1>
             <span className="text-xs bg-primary/10 text-primary px-2 py-1 rounded-md font-mono">
               ADMIN

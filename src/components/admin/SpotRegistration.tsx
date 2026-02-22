@@ -146,7 +146,7 @@ export const SpotRegistration = ({ onRegistered }: SpotRegistrationProps) => {
             <Input
               value={reg}
               onChange={(e) => setReg(e.target.value)}
-              placeholder="Enter REG number"
+              placeholder="Enter Registration number"
               className="bg-secondary border-border mt-1"
             />
           </div>
