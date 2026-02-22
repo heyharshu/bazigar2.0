@@ -4,8 +4,13 @@ import { toast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { UserPlus, Download, QrCode } from "lucide-react";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { UserPlus, QrCode, Mail } from "lucide-react";
 import QRCode from "qrcode";
 
 interface RegisteredParticipant {
@@ -24,9 +29,16 @@ export const SpotRegistration = ({ onRegistered }: SpotRegistrationProps) => {
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [loading, setLoading] = useState(false);
-  const [registered, setRegistered] = useState<RegisteredParticipant | null>(null);
-  const [qrDialog, setQrDialog] = useState<RegisteredParticipant | null>(null);
+  const [registered, setRegistered] =
+    useState<RegisteredParticipant | null>(null);
+  const [qrDialog, setQrDialog] =
+    useState<RegisteredParticipant | null>(null);
 
+  const [sending, setSending] = useState(false);
+  const [emailDialog, setEmailDialog] = useState(false);
+  const [emailInput, setEmailInput] = useState("");
+
+  // 🔹 Register participant
   const handleRegister = async () => {
     if (!reg.trim() || !name.trim()) {
       toast({
@@ -53,7 +65,7 @@ export const SpotRegistration = ({ onRegistered }: SpotRegistrationProps) => {
 
       if (error || !data) throw error;
 
-      // 2️⃣ Generate QR using REG
+      // 2️⃣ Generate QR
       const qrDataUrl = await QRCode.toDataURL(reg.trim(), {
         width: 300,
         margin: 2,
@@ -94,11 +106,53 @@ export const SpotRegistration = ({ onRegistered }: SpotRegistrationProps) => {
     setLoading(false);
   };
 
-  const downloadQR = (p: RegisteredParticipant) => {
-    const link = document.createElement("a");
-    link.href = p.qr_code_url;
-    link.download = `${p.reg}-qr.png`;
-    link.click();
+  // 🔹 Send Email
+  const sendEmailAuto = async (
+    p: RegisteredParticipant,
+    overrideEmail?: string
+  ) => {
+    try {
+      const emailToSend = overrideEmail || p.email;
+
+      if (!emailToSend) {
+        setEmailInput("");
+        setEmailDialog(true);
+        return;
+      }
+
+      setSending(true);
+
+      fetch(
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/send-qr-email`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
+          },
+          body: JSON.stringify({
+            name: p.name,
+            reg: p.reg,
+            email: emailToSend,
+            qr: p.qr_code_url,
+          }),
+        }
+      ).catch(() => {});
+
+      toast({
+        title: "Email Sent 📩",
+        description: `QR sent to ${emailToSend}`,
+      });
+
+      setTimeout(() => setSending(false), 1000);
+    } catch (err: any) {
+      setSending(false);
+      toast({
+        title: "Email Failed",
+        description: err.message,
+        variant: "destructive",
+      });
+    }
   };
 
   const reset = () => {
@@ -125,12 +179,21 @@ export const SpotRegistration = ({ onRegistered }: SpotRegistrationProps) => {
             <span className="text-sm font-medium">{registered.name}</span>
 
             <div className="flex gap-2">
-              <Button variant="ghost" size="sm" onClick={() => setQrDialog(registered)}>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setQrDialog(registered)}
+              >
                 <QrCode className="w-4 h-4" />
               </Button>
 
-              <Button variant="ghost" size="sm" onClick={() => downloadQR(registered)}>
-                <Download className="w-4 h-4" />
+              <Button
+                variant="ghost"
+                size="sm"
+                disabled={sending}
+                onClick={() => sendEmailAuto(registered)}
+              >
+                <Mail className="w-4 h-4" />
               </Button>
             </div>
           </div>
@@ -140,7 +203,13 @@ export const SpotRegistration = ({ onRegistered }: SpotRegistrationProps) => {
           </Button>
         </div>
       ) : (
-        <div className="space-y-3">
+        <form
+          className="space-y-3"
+          onSubmit={(e) => {
+            e.preventDefault();
+            handleRegister();
+          }}
+        >
           <div>
             <Label className="text-xs text-muted-foreground">REG *</Label>
             <Input
@@ -172,32 +241,69 @@ export const SpotRegistration = ({ onRegistered }: SpotRegistrationProps) => {
           </div>
 
           <Button
-            onClick={handleRegister}
+            type="submit"
             disabled={loading}
             className="w-full bg-primary text-primary-foreground font-mono"
           >
             <UserPlus className="w-4 h-4 mr-1" />
             {loading ? "Registering..." : "Register"}
           </Button>
-        </div>
+        </form>
       )}
 
+      {/* QR Dialog */}
       <Dialog open={!!qrDialog} onOpenChange={() => setQrDialog(null)}>
         <DialogContent className="bg-card border-border max-w-sm">
           <DialogHeader>
-            <DialogTitle className="font-mono">{qrDialog?.name}</DialogTitle>
+            <DialogTitle className="font-mono">
+              {qrDialog?.name}
+            </DialogTitle>
           </DialogHeader>
 
           {qrDialog?.qr_code_url && (
-            <div className="flex flex-col items-center gap-4">
-              <img src={qrDialog.qr_code_url} className="w-64 h-64 bg-white p-2 rounded" />
-
-              <Button onClick={() => downloadQR(qrDialog!)}>
-                <Download className="w-4 h-4 mr-2" />
-                Download QR
-              </Button>
-            </div>
+            <img
+              src={qrDialog.qr_code_url}
+              className="w-64 h-64 bg-white p-2 rounded mx-auto"
+            />
           )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Email Dialog */}
+      <Dialog open={emailDialog} onOpenChange={setEmailDialog}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Enter Email</DialogTitle>
+          </DialogHeader>
+
+          <div className="flex flex-col gap-3">
+            <Input
+              placeholder="example@vitbhopal.ac.in"
+              value={emailInput}
+              onChange={(e) => setEmailInput(e.target.value)}
+            />
+
+            <Button
+              disabled={sending}
+              onClick={async () => {
+                if (!registered) return;
+
+                await supabase
+                  .from("participants")
+                  .update({ email: emailInput })
+                  .eq("reg", registered.reg);
+
+                sendEmailAuto(
+                  { ...registered, email: emailInput },
+                  emailInput
+                );
+
+                setEmailDialog(false);
+              }}
+            >
+              {sending ? "Sending..." : "Send Email"}
+            </Button>
+          </div>
         </DialogContent>
       </Dialog>
     </div>
