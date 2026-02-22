@@ -61,7 +61,7 @@ const Admin = () => {
   // 🔓 Custom logout
   const handleLogout = () => {
     localStorage.removeItem("baazigar_user");
-    navigate("/login");
+  window.location.href = "/login"; // force redirect + block back
   };
 
   const totalPoints = participants.reduce((sum, p) => sum + p.points, 0);

@@ -1,55 +1,39 @@
-import { Navigate } from "react-router-dom";
-import { useEffect, useState } from "react";
+import { Navigate, useLocation } from "react-router-dom";
 
 interface ProtectedRouteProps {
   children: React.ReactNode;
-  allowedRole?: "admin" | "organizer";
+  allowedRoles?: string[]; // roles allowed for this route (optional)
 }
 
-export const ProtectedRoute = ({ children, allowedRole }: ProtectedRouteProps) => {
-  const [status, setStatus] = useState<"loading" | "ok" | "fail">("loading");
+export const ProtectedRoute = ({ children, allowedRoles }: ProtectedRouteProps) => {
+  const location = useLocation();
 
-  useEffect(() => {
-    try {
-      const raw = localStorage.getItem("baazigar_session");
+  try {
+    const raw = localStorage.getItem("baazigar_user");
 
-      if (!raw) {
-        setStatus("fail");
-        return;
-      }
-
-      const session = JSON.parse(raw);
-
-      if (!session?.id || !session?.role) {
-        localStorage.removeItem("baazigar_session");
-        setStatus("fail");
-        return;
-      }
-
-      // 🔐 Role check
-      if (allowedRole && session.role !== allowedRole) {
-        setStatus("fail");
-        return;
-      }
-
-      setStatus("ok");
-    } catch {
-      localStorage.removeItem("baazigar_session");
-      setStatus("fail");
+    // ❌ No session → go login
+    if (!raw) {
+      return <Navigate to="/login" state={{ from: location }} replace />;
     }
-  }, [allowedRole]);
 
-  if (status === "loading") {
-    return (
-      <div className="h-screen flex items-center justify-center text-sm">
-        Checking session...
-      </div>
-    );
-  }
+    const user = JSON.parse(raw);
 
-  if (status === "fail") {
+    // ❌ Invalid session → clear + login
+    if (!user || !user.role) {
+      localStorage.removeItem("baazigar_user");
+      return <Navigate to="/login" replace />;
+    }
+
+    // ❌ Role not allowed → block access
+    if (allowedRoles && !allowedRoles.includes(user.role)) {
+      return <Navigate to="/login" replace />;
+    }
+
+    // ✅ Valid session → allow route
+    return <>{children}</>;
+  } catch (error) {
+    // ❌ Corrupted storage → reset session
+    localStorage.removeItem("baazigar_user");
     return <Navigate to="/login" replace />;
   }
-
-  return <>{children}</>;
 };

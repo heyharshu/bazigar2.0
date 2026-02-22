@@ -27,9 +27,8 @@ const App = () => {
       ).catch(() => {});
     };
 
-    warm(); // run once immediately
+    warm(); // run immediately
     const interval = setInterval(warm, 300000); // every 5 min
-
     return () => clearInterval(interval);
   }, []);
 
@@ -41,34 +40,36 @@ const App = () => {
 
         <BrowserRouter>
           <Routes>
-            {/* Redirect root */}
+
+            {/* Redirect root → login */}
             <Route path="/" element={<Navigate to="/login" replace />} />
 
-            {/* Login */}
+            {/* Public Route */}
             <Route path="/login" element={<Login />} />
 
-            {/* Admin Panel */}
+            {/* 🔐 Admin Route */}
             <Route
               path="/admin"
               element={
-                <ProtectedRoute role="admin">
+                <ProtectedRoute allowedRoles={["admin"]}>
                   <Admin />
                 </ProtectedRoute>
               }
             />
 
-            {/* Scanner */}
+            {/* 🔐 Scanner / Organizer Route */}
             <Route
               path="/scanner"
               element={
-                <ProtectedRoute role="scanner">
+                <ProtectedRoute allowedRoles={["organizer"]}>
                   <Scanner />
                 </ProtectedRoute>
               }
             />
 
-            {/* Not Found */}
+            {/* 404 */}
             <Route path="*" element={<NotFound />} />
+
           </Routes>
         </BrowserRouter>
       </TooltipProvider>

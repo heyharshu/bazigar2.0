@@ -219,8 +219,8 @@ const Scanner = () => {
   };
 
   const handleLogout = () => {
-    stopScanner();
-    navigate("/login");
+    localStorage.removeItem("baazigar_user");
+  window.location.href = "/login"; // force redirect + block back
   };
 
   /* ================= UI ================= */
