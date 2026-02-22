@@ -1,32 +1,61 @@
 import { Navigate } from "react-router-dom";
+import { useEffect, useState } from "react";
+import { supabase } from "@/integrations/supabase/client";
 
 interface ProtectedRouteProps {
   children: React.ReactNode;
+  allowedRole?: "admin" | "organizer" | "scanner";
 }
 
-export const ProtectedRoute = ({ children }: ProtectedRouteProps) => {
-  try {
-    const raw = localStorage.getItem("baazigar_user");
+export const ProtectedRoute = ({
+  children,
+  allowedRole,
+}: ProtectedRouteProps) => {
+  const [loading, setLoading] = useState(true);
+  const [authorized, setAuthorized] = useState(false);
 
-    if (!raw) {
-      console.log("No session → redirect login");
-      return <Navigate to="/login" replace />;
-    }
+  useEffect(() => {
+    const checkAuth = async () => {
+      // 🔐 Get real session
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
 
-    const user = JSON.parse(raw);
+      if (!session) {
+        setAuthorized(false);
+        setLoading(false);
+        return;
+      }
 
-    if (!user || !user.role) {
-      console.log("Invalid session → redirect login");
-      localStorage.removeItem("baazigar_user");
-      return <Navigate to="/login" replace />;
-    }
+      // 🔐 Fetch role from DB (never trust localStorage)
+      const { data, error } = await supabase
+        .from("users")
+        .select("role")
+        .eq("id", session.user.id)
+        .single();
 
-    // ✅ session valid → allow access
-    return <>{children}</>;
+      if (error || !data) {
+        setAuthorized(false);
+        setLoading(false);
+        return;
+      }
 
-  } catch (err) {
-    console.log("Session error → redirect login");
-    localStorage.removeItem("baazigar_user");
-    return <Navigate to="/login" replace />;
-  }
+      // 🔐 Role check
+      if (allowedRole && data.role !== allowedRole) {
+        setAuthorized(false);
+      } else {
+        setAuthorized(true);
+      }
+
+      setLoading(false);
+    };
+
+    checkAuth();
+  }, [allowedRole]);
+
+  if (loading) return null;
+
+  if (!authorized) return <Navigate to="/login" replace />;
+
+  return <>{children}</>;
 };

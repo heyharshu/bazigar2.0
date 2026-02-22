@@ -9,7 +9,9 @@ import { GameManagement } from "@/components/admin/GameManagement";
 import { RechargeModal } from "@/components/admin/RechargeModal";
 import { SpotRegistration } from "@/components/admin/SpotRegistration";
 import { Gamepad2, LogOut, RefreshCw } from "lucide-react";
+import { useAutoLogout } from "@/hooks/useAutoLogout";
 
+useAutoLogout(20 * 60 * 1000); // 5 min
 const Admin = () => {
   const navigate = useNavigate();
 
