@@ -27,7 +27,13 @@ export const RechargeModal = ({
   const [loading, setLoading] = useState(false);
   const [search, setSearch] = useState("");
 
-  // 🔍 Filter participants by name or reg
+  // ✅ Get current logged-in user ONCE
+  const currentUser = JSON.parse(
+    localStorage.getItem("baazigar_user") || "null"
+  );
+  const username = currentUser?.username || currentUser?.role || "admin";
+
+  // 🔍 Filter participants
   const filteredParticipants = useMemo(() => {
     if (!search) return participants;
 
@@ -61,7 +67,7 @@ export const RechargeModal = ({
     setLoading(true);
 
     try {
-      // Update points
+      // ✅ Update participant points
       const { error: updateError } = await supabase
         .from("participants")
         .update({ points: participant.points + pts })
@@ -69,12 +75,12 @@ export const RechargeModal = ({
 
       if (updateError) throw updateError;
 
-      // Log transaction
+      // ✅ Insert transaction with dynamic scanned_by
       const { error: txError } = await supabase.from("transactions").insert({
         participant_reg: selectedId,
         points_change: pts,
         type: "recharge",
-        scanned_by: "admin",
+        scanned_by: username, // 🔥 dynamic user
       });
 
       if (txError) throw txError;
@@ -108,8 +114,7 @@ export const RechargeModal = ({
       </h3>
 
       <div className="space-y-3">
-
-        {/* Participant Select with Search */}
+        {/* Participant Select */}
         <div>
           <Label className="text-xs text-muted-foreground">
             Participant
@@ -121,13 +126,12 @@ export const RechargeModal = ({
             </SelectTrigger>
 
             <SelectContent className="bg-card border-border max-h-72">
-
-              {/* 🔍 Search box */}
+              {/* Search */}
               <div className="p-2 border-b border-border sticky top-0 bg-card">
                 <div className="relative">
                   <Search className="w-4 h-4 absolute left-2 top-1/2 -translate-y-1/2 text-muted-foreground" />
                   <Input
-                    placeholder="Search Participant "
+                    placeholder="Search Participant"
                     value={search}
                     onChange={(e) => setSearch(e.target.value)}
                     className="pl-7 h-8 text-sm bg-secondary"
@@ -135,7 +139,6 @@ export const RechargeModal = ({
                 </div>
               </div>
 
-              {/* List */}
               <div className="max-h-60 overflow-auto">
                 {filteredParticipants.length === 0 && (
                   <div className="p-3 text-xs text-muted-foreground text-center">
@@ -158,7 +161,7 @@ export const RechargeModal = ({
           <Label className="text-xs text-muted-foreground">Amount</Label>
           <Input
             type="number"
-            placeholder="Enter points "
+            placeholder="Enter points"
             value={amount}
             onChange={(e) => setAmount(e.target.value)}
             className="bg-secondary border-border mt-1 font-mono"
