@@ -36,8 +36,15 @@ const Login = () => {
       if (user.password !== password)
         throw new Error("Invalid username or password");
 
-      localStorage.setItem("baazigar_user", JSON.stringify(user));
-
+      localStorage.setItem(
+  "baazigar_user",
+  JSON.stringify({
+    id: user.id,
+    username: user.username,
+    role: user.role,
+    created_at: new Date().toISOString()
+  })
+);
       toast({
         title: "Login successful",
         description: `Welcome ${user.role}`,
