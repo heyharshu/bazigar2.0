@@ -19,6 +19,7 @@ const Admin = () => {
   const [transactions, setTransactions] = useState<any[]>([]);
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(true);
+
   const [scannerLocked, setScannerLocked] = useState(false);
   const [lockedBy, setLockedBy] = useState<string | null>(null);
 
@@ -35,9 +36,13 @@ const Admin = () => {
   const fetchData = async () => {
     try {
       const [pRes, gRes, tRes, lockRes] = await Promise.all([
-        supabase.from("participants").select("*"),
-        supabase.from("games").select("*"),
-        supabase.from("transactions").select("*").limit(50),
+        supabase.from("participants").select("*").order("name"),
+        supabase.from("games").select("*").order("name"),
+        supabase
+          .from("transactions")
+          .select("*")
+          .order("created_at", { ascending: false })
+          .limit(50),
         supabase
           .from("event_settings")
           .select("scanner_locked, locked_by")
@@ -70,7 +75,7 @@ const Admin = () => {
 
     if (!confirmAction) return;
 
-    const { error } = await supabase
+    await supabase
       .from("event_settings")
       .update({
         scanner_locked: !scannerLocked,
@@ -78,13 +83,18 @@ const Admin = () => {
       })
       .neq("id", "00000000-0000-0000-0000-000000000000");
 
-    if (!error) fetchData();
+    fetchData();
   };
 
   const handleLogout = () => {
     localStorage.removeItem("baazigar_user");
     window.location.href = "/login";
   };
+
+  const totalPoints = participants.reduce(
+    (sum, p) => sum + (p.points || 0),
+    0
+  );
 
   const filteredParticipants = useMemo(() => {
     return participants.filter((p) =>
@@ -93,16 +103,6 @@ const Admin = () => {
         .includes(search.toLowerCase())
     );
   }, [participants, search]);
-
-  const totalPoints = participants.reduce(
-    (sum, p) => sum + (p.points || 0),
-    0
-  );
-
-  const topPlayer = participants.reduce(
-    (max, p) => (p.points > (max?.points || 0) ? p : max),
-    null
-  );
 
   if (loading) {
     return (
@@ -116,22 +116,23 @@ const Admin = () => {
     <div className="min-h-screen bg-background">
 
       {/* Header */}
-      <header className="border-b bg-card/80 backdrop-blur-md sticky top-0 z-50 shadow-sm">
+      <header className="border-b border-border bg-card/50 backdrop-blur-sm sticky top-0 z-50">
         <div className="container mx-auto px-4 py-3 flex items-center justify-between">
           <div className="flex items-center gap-3">
             <Gamepad2 className="w-6 h-6 text-primary" />
-            <h1 className="text-xl font-bold text-primary">
+            <h1 className="text-xl font-mono font-bold text-primary">
               BAAZIGAR 2.0
             </h1>
-            <span className="text-xs bg-primary/10 px-2 py-1 rounded">
+            <span className="text-xs bg-primary/10 text-primary px-2 py-1 rounded-md font-mono">
               ADMIN
             </span>
           </div>
 
           <div className="flex items-center gap-2">
+
             <Button
-              onClick={toggleScannerLock}
               variant={scannerLocked ? "destructive" : "default"}
+              onClick={toggleScannerLock}
             >
               {scannerLocked ? "Resume Scanner" : "Stop Scanner"}
             </Button>
@@ -143,11 +144,12 @@ const Admin = () => {
             <Button variant="ghost" size="icon" onClick={handleLogout}>
               <LogOut className="w-4 h-4" />
             </Button>
+
           </div>
         </div>
       </header>
 
-      {/* Scanner Lock Banner */}
+      {/* Scanner Status Banner */}
       {scannerLocked && (
         <div className="bg-red-600 text-white text-center py-2 font-semibold">
           🔒 Scanner Disabled — Locked by {lockedBy}
@@ -156,89 +158,33 @@ const Admin = () => {
 
       <main className="container mx-auto px-4 py-6 space-y-6">
 
-        <div className="bg-card border rounded-2xl p-4 shadow-sm">
-          <StatsCards
-            totalParticipants={participants.length}
-            totalPoints={totalPoints}
-            totalTransactions={
-              transactions.filter((tx) => tx.type === "deduction").length
-            }
-          />
-        </div>
+        <StatsCards
+          totalParticipants={participants.length}
+          totalPoints={totalPoints}
+          totalTransactions={
+            transactions.filter((tx) => tx.type === "deduction").length
+          }
+        />
 
-        <div className="bg-card border rounded-2xl p-4 shadow-sm">
-          <h2 className="font-semibold mb-3">🏆 Leaderboard</h2>
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          <div className="lg:col-span-2 space-y-6">
 
-          <div className="space-y-2 max-h-60 overflow-auto">
-            {[...participants]
-              .sort((a, b) => b.points - a.points)
-              .slice(0, 10)
-              .map((p, i) => (
-                <div
-                  key={p.id}
-                  className="flex justify-between items-center bg-muted/40 px-3 py-2 rounded-lg"
-                >
-                  <div className="flex gap-3">
-                    <span className="w-6 text-sm font-mono">
-                      #{i + 1}
-                    </span>
-                    <span>{p.name}</span>
-                  </div>
-                  <span className="font-bold text-primary">
-                    {p.points} pts
-                  </span>
-                </div>
-              ))}
-          </div>
+            <ParticipantsTable
+              participants={filteredParticipants}
+              search={search}
+              onSearchChange={setSearch}
+              onRefresh={fetchData}
+            />
 
-          {topPlayer && (
-            <div className="mt-3 bg-green-500/10 border border-green-400 rounded-xl p-3">
-              🏆 Current Leader: <b>{topPlayer.name}</b> —{" "}
-              {topPlayer.points} pts
-            </div>
-          )}
-        </div>
-
-        <div className="grid grid-cols-1 xl:grid-cols-4 gap-6">
-          <div className="xl:col-span-3 bg-card border rounded-2xl shadow-sm">
-            <div className="p-4 border-b font-semibold">
-              Participants
-            </div>
-
-            <div className="p-4 overflow-auto max-h-[65vh]">
-              <ParticipantsTable
-                participants={filteredParticipants}
-                search={search}
-                onSearchChange={setSearch}
-                onRefresh={fetchData}
-              />
-            </div>
           </div>
 
           <div className="space-y-6">
-            <div className="bg-card border rounded-2xl p-4 shadow-sm">
-              <h2 className="font-semibold mb-3">
-                Spot Registration
-              </h2>
-              <SpotRegistration onRegistered={fetchData} />
-            </div>
-
-            <div className="bg-card border rounded-2xl p-4 shadow-sm">
-              <h2 className="font-semibold mb-3">
-                Game Management
-              </h2>
-              <GameManagement games={games} onUpdated={fetchData} />
-            </div>
-
-            <div className="bg-card border rounded-2xl p-4 shadow-sm">
-              <h2 className="font-semibold mb-3">
-                Recharge / Deduct
-              </h2>
-              <RechargeModal
-                participants={participants}
-                onRecharged={fetchData}
-              />
-            </div>
+            <SpotRegistration onRegistered={fetchData} />
+            <GameManagement games={games} onUpdated={fetchData} />
+            <RechargeModal
+              participants={participants}
+              onRecharged={fetchData}
+            />
           </div>
         </div>
       </main>
