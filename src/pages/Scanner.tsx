@@ -33,7 +33,10 @@ const Scanner = () => {
   const scannerContainerId = "qr-reader";
 
   /* ================= LOAD DATA ================= */
-
+const currentUser = JSON.parse(
+    localStorage.getItem("baazigar_user") || "null"
+  );
+  const usename = currentUser?.username || currentUser?.role || "organizer";
   const loadData = async () => {
     const { data: g } = await supabase.from("games").select("*").order("name");
 
@@ -185,7 +188,7 @@ const Scanner = () => {
         game_name: game.name,
         points_change: -game.cost,
         type: "deduction",
-        scanned_by: scannerUser,
+        scanned_by: usename,
       });
 
       setParticipant({ ...participant, points: newPoints });
