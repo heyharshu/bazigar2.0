@@ -15,11 +15,10 @@ import {
 import { Html5Qrcode } from "html5-qrcode";
 import { useAutoLogout } from "@/hooks/useAutoLogout";
 
-
 type ScanState = "scanning" | "scanned" | "success" | "error";
 
 const Scanner = () => {
-  useAutoLogout(20 * 60 * 1000); // 5 min
+  useAutoLogout(20 * 60 * 1000);
   const navigate = useNavigate();
 
   const [scanState, setScanState] = useState<ScanState>("scanning");
@@ -28,52 +27,10 @@ const Scanner = () => {
   const [leaderboard, setLeaderboard] = useState<any[]>([]);
   const [errorMessage, setErrorMessage] = useState("");
   const [scannerUser, setScannerUser] = useState("organizer");
+  const [scannerLocked, setScannerLocked] = useState(false);
 
   const scannerRef = useRef<Html5Qrcode | null>(null);
   const scannerContainerId = "qr-reader";
-
-  /* ================= SOUND + VIBRATION ================= */
-
-  const vibrate = (pattern: number | number[]) => {
-    if (navigator.vibrate) navigator.vibrate(pattern);
-  };
-
-  const playBeep = (frequency: number, duration = 120) => {
-    try {
-      const ctx = new (window.AudioContext ||
-        (window as any).webkitAudioContext)();
-      const osc = ctx.createOscillator();
-      const gain = ctx.createGain();
-
-      osc.connect(gain);
-      gain.connect(ctx.destination);
-
-      osc.type = "sine";
-      osc.frequency.value = frequency;
-
-      osc.start();
-      gain.gain.exponentialRampToValueAtTime(
-        0.00001,
-        ctx.currentTime + duration / 1000
-      );
-
-      setTimeout(() => {
-        osc.stop();
-        ctx.close();
-      }, duration);
-    } catch {}
-  };
-
-  const successFeedback = () => {
-    playBeep(900, 120);
-    setTimeout(() => playBeep(1200, 120), 140);
-    vibrate([120, 40, 120]);
-  };
-
-  const errorFeedback = () => {
-    playBeep(200, 200);
-    vibrate(200);
-  };
 
   /* ================= LOAD DATA ================= */
 
@@ -90,8 +47,22 @@ const Scanner = () => {
     if (l) setLeaderboard(l);
   };
 
+  /* ================= CHECK SCANNER LOCK ================= */
+
+  const checkScannerLock = async () => {
+    const { data } = await supabase
+      .from("event_settings")
+      .select("scanner_locked")
+      .single();
+
+    if (data) setScannerLocked(data.scanner_locked);
+  };
+
   useEffect(() => {
     loadData();
+    checkScannerLock();
+
+    const interval = setInterval(checkScannerLock, 3000);
 
     supabase.auth.getUser().then(({ data }) => {
       const userName =
@@ -100,6 +71,8 @@ const Scanner = () => {
         "organizer";
       setScannerUser(userName);
     });
+
+    return () => clearInterval(interval);
   }, []);
 
   /* ================= SCANNER CONTROL ================= */
@@ -115,7 +88,6 @@ const Scanner = () => {
       } catch {}
 
       scannerRef.current = null;
-      await new Promise((res) => setTimeout(res, 350));
     }
   };
 
@@ -162,7 +134,6 @@ const Scanner = () => {
       .single();
 
     if (error || !data) {
-      errorFeedback();
       setErrorMessage("Participant not found");
       setScanState("error");
       return;
@@ -177,8 +148,22 @@ const Scanner = () => {
   const handleDeduct = async (game: any) => {
     if (!participant) return;
 
+    // 🔒 BLOCK IF LOCKED
+    const { data: lock } = await supabase
+      .from("event_settings")
+      .select("scanner_locked")
+      .single();
+
+    if (lock?.scanner_locked) {
+      toast({
+        title: "Scanner Disabled",
+        description: "Admin has stopped scanner deductions.",
+        variant: "destructive",
+      });
+      return;
+    }
+
     if (participant.points < game.cost) {
-      errorFeedback();
       setErrorMessage(
         `Insufficient points! Need ${game.cost}, has ${participant.points}`
       );
@@ -205,15 +190,13 @@ const Scanner = () => {
 
       setParticipant({ ...participant, points: newPoints });
       setScanState("success");
-      successFeedback();
       loadData();
 
       toast({
         title: "Points Deducted",
         description: `${game.cost} pts for ${game.name}`,
       });
-    } catch (err: any) {
-      errorFeedback();
+    } catch {
       setErrorMessage("Transaction failed");
       setScanState("error");
     }
@@ -221,13 +204,14 @@ const Scanner = () => {
 
   const handleLogout = () => {
     localStorage.removeItem("baazigar_user");
-  window.location.href = "/login"; // force redirect + block back
+    window.location.href = "/login";
   };
 
   /* ================= UI ================= */
 
   return (
     <div className="min-h-screen bg-background flex flex-col">
+
       {/* HEADER */}
       <header className="border-b bg-card p-3 flex justify-between">
         <div className="flex gap-2 items-center">
@@ -241,6 +225,13 @@ const Scanner = () => {
         </Button>
       </header>
 
+      {/* LOCK BANNER */}
+      {scannerLocked && (
+        <div className="bg-red-600 text-white text-center py-2 font-semibold">
+          🔒 Scanner Disabled by Admin
+        </div>
+      )}
+
       {/* SCANNING */}
       {scanState === "scanning" && (
         <div className="flex-1 flex flex-col items-center justify-center p-4">
@@ -250,7 +241,6 @@ const Scanner = () => {
             Scan QR
           </p>
 
-          {/* Leaderboard */}
           <div className="mt-8 w-full max-w-sm bg-card border rounded-xl p-4">
             <p className="font-mono text-sm mb-2 flex items-center gap-2">
               <Trophy className="w-4 h-4 text-yellow-400" />
@@ -260,7 +250,9 @@ const Scanner = () => {
             {leaderboard.map((p, i) => (
               <div key={i} className="flex justify-between text-sm py-1">
                 <span>{i + 1}. {p.name}</span>
-                <span className="text-primary font-mono">{p.points}</span>
+                <span className="text-primary font-mono">
+                  {p.points}
+                </span>
               </div>
             ))}
           </div>
@@ -273,7 +265,7 @@ const Scanner = () => {
           <div className="bg-card border rounded-xl p-4 mb-4">
             <p className="text-lg font-bold">{participant.name}</p>
             <p className="text-sm text-muted-foreground">
-              {participant.reg || "No Regitration Number"}
+              {participant.reg}
             </p>
             <p className="text-3xl text-primary font-mono">
               {participant.points} pts
@@ -285,15 +277,19 @@ const Scanner = () => {
               <button
                 key={game.id}
                 onClick={() => handleDeduct(game)}
-                disabled={participant.points < game.cost}
+                disabled={
+                  participant.points < game.cost || scannerLocked
+                }
                 className={`p-4 rounded-xl border transition ${
-                  participant.points >= game.cost
+                  participant.points >= game.cost && !scannerLocked
                     ? "bg-secondary hover:border-primary"
                     : "opacity-50 cursor-not-allowed"
                 }`}
               >
                 <p>{game.name}</p>
-                <p className="text-xs text-primary">{game.cost} pts</p>
+                <p className="text-xs text-primary">
+                  {game.cost} pts
+                </p>
               </button>
             ))}
           </div>
