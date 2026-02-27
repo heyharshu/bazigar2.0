@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
+import { useMemo, useState } from "react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Search, QrCode, RefreshCw, Mail } from "lucide-react";
@@ -31,10 +32,21 @@ export const ParticipantsTable = ({
   const [emailParticipant, setEmailParticipant] = useState<any>(null);
   const [sending, setSending] = useState(false); // 🔥 prevent double click
 
-  const filtered = participants.filter((p) =>
-    p.name?.toLowerCase().includes(search.toLowerCase()) ||
-    p.reg?.toLowerCase().includes(search.toLowerCase())
-  );
+  const filtered = useMemo(() => {
+  const query = search.trim().toLowerCase();
+
+  if (!query) return participants;
+
+  return participants.filter((p) => {
+    const name = (p.name || "").toLowerCase();
+    const reg = (p.reg || "").toLowerCase();
+
+    return (
+      name.includes(query) ||
+      reg.includes(query)
+    );
+  });
+}, [participants, search]);
 
   // Generate QR and save in DB
   const generateQR = async (participant: any) => {
