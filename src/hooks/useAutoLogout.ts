@@ -1,21 +1,32 @@
 import { useEffect } from "react";
-import { supabase } from "@/integrations/supabase/client";
 
-export const useAutoLogout = (timeout = 5 * 60 * 1000) => {
+export const useAutoLogout = (timeout: number) => {
   useEffect(() => {
-    let timer: any;
+    let timer: NodeJS.Timeout;
+
+    const logout = () => {
+      // ✅ clear EVERYTHING
+      localStorage.clear();
+      sessionStorage.clear();
+
+      // optional: remove supabase auth if used
+      try {
+        localStorage.removeItem("supabase.auth.token");
+      } catch {}
+
+      window.location.href = "/login";
+    };
 
     const resetTimer = () => {
       clearTimeout(timer);
-      timer = setTimeout(async () => {
-        await supabase.auth.signOut();
-        window.location.href = "/login";
-      }, timeout);
+      timer = setTimeout(logout, timeout);
     };
 
+    // activity listeners
     window.addEventListener("mousemove", resetTimer);
     window.addEventListener("keydown", resetTimer);
     window.addEventListener("click", resetTimer);
+    window.addEventListener("scroll", resetTimer);
 
     resetTimer();
 
@@ -24,6 +35,7 @@ export const useAutoLogout = (timeout = 5 * 60 * 1000) => {
       window.removeEventListener("mousemove", resetTimer);
       window.removeEventListener("keydown", resetTimer);
       window.removeEventListener("click", resetTimer);
+      window.removeEventListener("scroll", resetTimer);
     };
   }, [timeout]);
 };
