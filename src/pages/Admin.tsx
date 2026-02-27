@@ -11,7 +11,7 @@ import { Gamepad2, LogOut, RefreshCw } from "lucide-react";
 import { useAutoLogout } from "@/hooks/useAutoLogout";
 
 const Admin = () => {
-  useAutoLogout(20 * 60 * 1000);
+  useAutoLogout(20 * 60 * 1000); // 20 min auto logout
   const navigate = useNavigate();
 
   const [participants, setParticipants] = useState<any[]>([]);
@@ -25,10 +25,12 @@ const Admin = () => {
 
   useEffect(() => {
     const user = JSON.parse(localStorage.getItem("baazigar_user") || "null");
+
     if (!user) return navigate("/login");
     if (user.role !== "admin") return navigate("/scanner");
 
     fetchData();
+
     const interval = setInterval(fetchData, 5000);
     return () => clearInterval(interval);
   }, []);
@@ -52,6 +54,7 @@ const Admin = () => {
       if (pRes.data) setParticipants(pRes.data);
       if (gRes.data) setGames(gRes.data);
       if (tRes.data) setTransactions(tRes.data);
+
       if (lockRes.data) {
         setScannerLocked(lockRes.data.scanner_locked);
         setLockedBy(lockRes.data.locked_by);
@@ -86,8 +89,10 @@ const Admin = () => {
     fetchData();
   };
 
+  // ✅ Proper logout
   const handleLogout = () => {
-    localStorage.removeItem("baazigar_user");
+    localStorage.clear();
+    sessionStorage.clear();
     window.location.href = "/login";
   };
 
@@ -96,12 +101,18 @@ const Admin = () => {
     0
   );
 
+  // ✅ SINGLE SOURCE FILTERING
   const filteredParticipants = useMemo(() => {
-    return participants.filter((p) =>
-      `${p.name} ${p.reg_no}`
-        .toLowerCase()
-        .includes(search.toLowerCase())
-    );
+    const query = search.trim().toLowerCase();
+
+    if (!query) return participants;
+
+    return participants.filter((p) => {
+      const name = (p.name || "").toLowerCase();
+      const reg = (p.reg || "").toLowerCase();
+
+      return name.includes(query) || reg.includes(query);
+    });
   }, [participants, search]);
 
   if (loading) {
@@ -118,6 +129,7 @@ const Admin = () => {
       {/* Header */}
       <header className="border-b border-border bg-card/50 backdrop-blur-sm sticky top-0 z-50">
         <div className="container mx-auto px-4 py-3 flex items-center justify-between">
+
           <div className="flex items-center gap-3">
             <Gamepad2 className="w-6 h-6 text-primary" />
             <h1 className="text-xl font-mono font-bold text-primary">
@@ -129,7 +141,6 @@ const Admin = () => {
           </div>
 
           <div className="flex items-center gap-2">
-
             <Button
               variant={scannerLocked ? "destructive" : "default"}
               onClick={toggleScannerLock}
@@ -144,12 +155,11 @@ const Admin = () => {
             <Button variant="ghost" size="icon" onClick={handleLogout}>
               <LogOut className="w-4 h-4" />
             </Button>
-
           </div>
+
         </div>
       </header>
 
-      {/* Scanner Status Banner */}
       {scannerLocked && (
         <div className="bg-red-600 text-white text-center py-2 font-semibold">
           🔒 Scanner Disabled — Locked by {lockedBy}
@@ -167,15 +177,14 @@ const Admin = () => {
         />
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          <div className="lg:col-span-2 space-y-6">
 
+          <div className="lg:col-span-2 space-y-6">
             <ParticipantsTable
               participants={filteredParticipants}
               search={search}
               onSearchChange={setSearch}
               onRefresh={fetchData}
             />
-
           </div>
 
           <div className="space-y-6">
@@ -186,6 +195,7 @@ const Admin = () => {
               onRecharged={fetchData}
             />
           </div>
+
         </div>
       </main>
     </div>

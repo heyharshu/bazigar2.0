@@ -1,7 +1,6 @@
 import { useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
-import { useMemo, useState } from "react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Search, QrCode, RefreshCw, Mail } from "lucide-react";
@@ -26,29 +25,13 @@ export const ParticipantsTable = ({
   onSearchChange,
   onRefresh,
 }: ParticipantsTableProps) => {
+
   const [selectedQR, setSelectedQR] = useState<any>(null);
   const [emailDialog, setEmailDialog] = useState(false);
   const [emailInput, setEmailInput] = useState("");
   const [emailParticipant, setEmailParticipant] = useState<any>(null);
-  const [sending, setSending] = useState(false); // 🔥 prevent double click
+  const [sending, setSending] = useState(false);
 
-  const filtered = useMemo(() => {
-  const query = search.trim().toLowerCase();
-
-  if (!query) return participants;
-
-  return participants.filter((p) => {
-    const name = (p.name || "").toLowerCase();
-    const reg = (p.reg || "").toLowerCase();
-
-    return (
-      name.includes(query) ||
-      reg.includes(query)
-    );
-  });
-}, [participants, search]);
-
-  // Generate QR and save in DB
   const generateQR = async (participant: any) => {
     try {
       const qrDataUrl = await QRCode.toDataURL(participant.reg, {
@@ -78,7 +61,6 @@ export const ParticipantsTable = ({
     }
   };
 
-  // 🔥 Async Email Sender (Instant UI)
   const sendEmailAuto = async (participant: any, overrideEmail?: string) => {
     try {
       const emailToSend = overrideEmail || participant.email;
@@ -92,7 +74,6 @@ export const ParticipantsTable = ({
 
       setSending(true);
 
-      // 🔥 Fire in background (NO await)
       fetch(
         `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/send-qr-email`,
         {
@@ -110,19 +91,14 @@ export const ParticipantsTable = ({
         }
       ).catch(() => {});
 
-      // ⚡ Instant notification
       toast({
         title: "Email Sent 📩",
         description: `QR sent to ${emailToSend}`,
       });
 
-      // 🔄 Refresh table in background
       onRefresh();
 
-      // 🛑 Prevent double click for 1 second
-      setTimeout(() => {
-        setSending(false);
-      }, 1000);
+      setTimeout(() => setSending(false), 1000);
 
     } catch (err: any) {
       setSending(false);
@@ -136,6 +112,7 @@ export const ParticipantsTable = ({
 
   return (
     <div className="bg-card border border-border rounded-xl p-4">
+
       {/* Header */}
       <div className="flex items-center justify-between mb-3">
         <h3 className="text-sm font-mono font-semibold text-muted-foreground">
@@ -145,7 +122,7 @@ export const ParticipantsTable = ({
         <div className="relative w-64">
           <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
           <Input
-            placeholder="Search "
+            placeholder="Search by Name or Reg No..."
             value={search}
             onChange={(e) => onSearchChange(e.target.value)}
             className="pl-9"
@@ -167,34 +144,24 @@ export const ParticipantsTable = ({
           </thead>
 
           <tbody>
-            {filtered.map((p) => (
+            {participants.map((p) => (
               <tr key={p.reg} className="border-t hover:bg-secondary/40">
                 <td className="p-3">{p.reg}</td>
                 <td className="p-3">{p.name}</td>
                 <td className="p-3 text-right">{p.points}</td>
 
-                {/* QR */}
                 <td className="p-3 text-right">
                   {p.qr_code_url ? (
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      onClick={() => setSelectedQR(p)}
-                    >
+                    <Button size="sm" variant="ghost" onClick={() => setSelectedQR(p)}>
                       <QrCode className="w-4 h-4" />
                     </Button>
                   ) : (
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      onClick={() => generateQR(p)}
-                    >
+                    <Button size="sm" variant="ghost" onClick={() => generateQR(p)}>
                       <RefreshCw className="w-4 h-4" />
                     </Button>
                   )}
                 </td>
 
-                {/* Email */}
                 <td className="p-3 text-right">
                   <Button
                     size="sm"
@@ -258,6 +225,7 @@ export const ParticipantsTable = ({
           </div>
         </DialogContent>
       </Dialog>
+
     </div>
   );
 };
