@@ -11,7 +11,7 @@ export const useAutoLogout = (timeout: number) => {
 
       // optional: remove supabase auth if used
       try {
-        localStorage.removeItem("supabase.auth.token");
+        localStorage.removeItem("baazigar_user");
       } catch {}
 
       window.location.href = "/login";
